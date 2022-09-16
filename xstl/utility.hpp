@@ -1,5 +1,5 @@
 /*
-*   Copyright (c) 2020 Shen Xian. All rights reserved.
+*   Copyright (c) 2022 Kamichanw. All rights reserved.
 *   @file utility.hpp
 *   @brief The utility library contains many practical tools.
 *   @author Shen Xian e-mail: 865710157@qq.com

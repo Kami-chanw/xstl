@@ -46,12 +46,6 @@
     <ClInclude Include="compressed_tuple.hpp">
       <Filter>Head Files</Filter>
     </ClInclude>
-    <ClInclude Include="dlist.hpp">
-      <Filter>Head Files</Filter>
-    </ClInclude>
-    <ClInclude Include="slist.hpp">
-      <Filter>Head Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="bin_reader.cpp">

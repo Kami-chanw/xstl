@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2020 Shen Xian. All rights reserved.
+ *   Copyright (c) 2022 Kamichanw. All rights reserved.
  *   @file allocator.hpp
  *   @brief The allocator library contains 3 types of allocator:
  *	1. malloc_alloc

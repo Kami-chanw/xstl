@@ -1,5 +1,5 @@
 /*
- *	Copyright(c) 2020 Shen Xian.All rights reserved.
+ *	Copyright(c) 2022 Kamichanw.All rights reserved.
  *   @file config.hpp
  *   @brief The config.hpp contains all of containers' base and templates for iterators.
  *   @author Shen Xian e-mail: 865710157@qq.com

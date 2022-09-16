@@ -1,5 +1,5 @@
 ﻿/*
- *   Copyright (c) 2020 Shen Xian. All rights reserved.
+ *   Copyright (c) 2022 Kamichanw. All rights reserved.
  *   @file allocator.hpp
  *   @brief The tree library contains 5 types of binary search trees :
  *	1. bs_tree (Binary Search Tree)
@@ -991,7 +991,7 @@ namespace xstl {
                         do {
                             if (_curr->_right->_is_nil)
                                 return { { _curr, _Inspos::RIGHT }, true };
-                        } while (!_Getcmpr()(key, KFN(_curr->_right)) && (_curr = _curr->_right));  // travelling while suc->_right.key == key
+                        } while (!_Getcmpr()(key, KFN(_curr->_right)) && (_curr = _curr->_right, true));  // travelling while suc->_right.key == key
                         return { { _curr, _Inspos::LEFT }, true };
                     }
                     else

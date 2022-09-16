@@ -168,9 +168,7 @@
     <ClInclude Include="compress.hpp" />
     <ClInclude Include="compressed_tuple.hpp" />
     <ClInclude Include="config.hpp" />
-    <ClInclude Include="dlist.hpp" />
     <ClInclude Include="huffman.hpp" />
-    <ClInclude Include="slist.hpp" />
     <ClInclude Include="utility.hpp" />
   </ItemGroup>
   <ItemGroup>
