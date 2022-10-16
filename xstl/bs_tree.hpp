@@ -159,6 +159,7 @@ namespace xstl {
 
             _Scary_tree() { init(); }
 
+            // clang-format off
 #ifdef _PREORDER_ITERATOR_
             static void incr(_Tree_node_base*& node) noexcept {
                 if (!node->_left->_is_nil)
@@ -183,8 +184,7 @@ namespace xstl {
                 if (node == _pre->_right && !_pre->_left->_is_nil && !node->_parent->_is_nil) {
                     _pre = _pre->_left;
                     while (!_pre->_right->_is_nil || !_pre->_left->_is_nil) {
-                        for (; !_pre->_right->_is_nil; _pre = _pre->_right)
-                            ;
+                        for (; !_pre->_right->_is_nil; _pre = _pre->_right);
                         if (!_pre->_left->_is_nil)
                             _pre = _pre->_left;
                     }
@@ -197,8 +197,7 @@ namespace xstl {
                 if (node == _suc->_left && !_suc->_right->_is_nil && !node->_parent->_is_nil) {
                     _suc = _suc->_right;
                     while (!_suc->_left->_is_nil || !_suc->_right->_is_nil) {
-                        for (; !_suc->_left->_is_nil; _suc = _suc->_left)
-                            ;
+                        for (; !_suc->_left->_is_nil; _suc = _suc->_left);
                         if (!_suc->_right->_is_nil)
                             _suc = _suc->_right;
                     }
@@ -224,6 +223,7 @@ namespace xstl {
                 }
             }
 #else  //_INORDER_ITERATOR_
+       // clang-format on
             static void incr(_Tree_node_base*& node) noexcept { node = _Find_inorder_successor(node); }
 
             static void _Decr(_Tree_node_base*& node) noexcept { node = node->_is_nil ? node->_right : _Find_inorder_predecessor(node); }
@@ -241,9 +241,9 @@ namespace xstl {
 
             static value_type& extract(_Tree_node_base* node) noexcept { return VALUE(node); }
 
-            static bool dereferable(const _Self* tree, _Tree_node_base* node) { return node != std::addressof(tree->_root); }
+            static bool dereferable(const _Self* tree, _Tree_node_base* node) noexcept { return node != std::addressof(tree->_root); }
 
-            static bool incrable(const _Self* tree, _Tree_node_base* node) { return !node->_is_nil; }
+            static bool incrable(const _Self* tree, _Tree_node_base* node) noexcept { return !node->_is_nil; }
 
             static bool decrable(const _Self* tree, _Tree_node_base* node) {
                 return true;  // always true because verification should be after decreasing
@@ -296,7 +296,7 @@ namespace xstl {
         using reverse_iterator       = xstl_iterator::reverse_iterator<iterator>;
 #else
         using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-        using reverse_iterator = std::reverse_iterator<iterator>;
+        using reverse_iterator       = std::reverse_iterator<iterator>;
 #endif
         using node_type = typename _Traits::node_type;
 
@@ -356,7 +356,7 @@ namespace xstl {
 #else
         [[nodiscard]] const_reverse_iterator crend() const noexcept { return const_reverse_iterator(cbegin()); }
 #endif
-
+        // clang-format off
         /**
          *	@brief constructs an empty bs_tree.
          *	@param cmpr : comparison function object to use for all comparisons of keys
@@ -366,8 +366,7 @@ namespace xstl {
 #if defined _POSTORDER_ITERATOR_ || defined _PREORDER_ITERATOR_
             : _begin(_Get_root())
 #endif
-        {
-        }
+        { }
 
         explicit _Bs_tree(const key_compare& cmpr)
             : _tpl(cmpr, std::ignore, std::ignore)
@@ -375,8 +374,7 @@ namespace xstl {
               ,
               _begin(_Get_root())
 #endif
-        {
-        }
+        { }
 
         _Bs_tree(const key_compare& cmpr, const allocator_type& alloc)
             : _tpl(cmpr, alloc, std::ignore)
@@ -384,8 +382,9 @@ namespace xstl {
               ,
               _begin(_Get_root())
 #endif
-        {
-        }
+        { }
+        // clang-format on
+
         /**
          *   @brief constructs the bs_tree with the copy of the contents of other.
          *   @param tree : other instance of bs_trees(pass by lvalue).
@@ -888,8 +887,7 @@ namespace xstl {
             try {
                 _node->_left  = _Copy(src->_left, _node);
                 _node->_right = _Copy(src->_right, _node);
-            }
-            catch (...) {
+            } catch (...) {
                 _Destroy(CAST(_node));
             }
         }
@@ -1046,7 +1044,7 @@ namespace xstl {
         }
         _begin = _curr;
 #elif defined _POSTORDER_ITERATOR_
-        link_type _curr = _Get_root()->_left != _Get_root()->_parent && !_Get_root()->_left->_right->_is_nil ? _Get_root()->_left : _Get_root()->_parent->_right;
+        link_type                            _curr = _Get_root()->_left != _Get_root()->_parent && !_Get_root()->_left->_right->_is_nil ? _Get_root()->_left : _Get_root()->_parent->_right;
         while (!_curr->_left->_is_nil || !_curr->_right->_is_nil) {
             for (; !_curr->_left->_is_nil; _curr = _curr->_left)
                 ;
@@ -1352,20 +1350,21 @@ namespace xstl {
 
     template <class _Traits, template <class, class> class... _MixIn>
     typename _Bs_tree<_Traits, _MixIn...>::size_type _Bs_tree<_Traits, _MixIn...>::depth() const noexcept {
-        std::function<size_type(link_type)> _get_depth = [ & ](link_type node) { return node->_is_nil ? 0 : (std::max)(_get_depth(node->_left), _get_depth(node->_right)) + 1; };
+        std::function<size_type(link_type)> _get_depth = [&](link_type node) { return node->_is_nil ? 0 : (std::max)(_get_depth(node->_left), _get_depth(node->_right)) + 1; };
         return _get_depth(_Get_root()->_parent);
     }
 
     template <class _Traits, template <class, class> class... _MixIn>
     typename _Bs_tree<_Traits, _MixIn...>::size_type _Bs_tree<_Traits, _MixIn...>::width() const {
-        std::vector<int>                          wid;
-        std::function<void(link_type, size_type)> _get_width = [ & ](link_type node, size_type dep) {
+        std::vector<int> wid;
+
+        std::function<void(link_type, size_type)> _get_width = [&](link_type node, size_type dep) {
             if (node->_is_nil)
                 return;
             if (wid.size() <= dep)
                 wid.push_back(1);
             else
-                ++wid[ dep ];
+                ++wid[dep];
             _get_width(node->_left, dep + 1);
             _get_width(node->_right, dep + 1);
         };
@@ -1376,12 +1375,13 @@ namespace xstl {
     template <class _Traits, template <class, class> class... _MixIn>
     template <class _Elem, class _ElemTraits>
     void _Bs_tree<_Traits, _MixIn...>::display(std::basic_ostream<_Elem, _ElemTraits>& out) const {
-        bool                                            _visited[ 128 ] = { false };
-        std::function<void(link_type, size_type, bool)> _display        = [ & ](link_type node, size_type size, bool position) {
+        bool _visited[128] = { false };
+
+        std::function<void(link_type, size_type, bool)> _display = [&](link_type node, size_type size, bool position) {
             if (size >= 127)
                 return;
             for (int i = 1; i < size; i++)
-                out << (_visited[ i ] ? static_cast<const _Elem*>("  │") : static_cast<const _Elem*>("   "));
+                out << (_visited[i] ? static_cast<const _Elem*>("  │") : static_cast<const _Elem*>("   "));
             if (node->_is_nil)
                 out << (position ? static_cast<const _Elem*>("  ├─ ") : static_cast<const _Elem*>("  └─ ")) << static_cast<_Elem>('\n');
             else {
@@ -1393,9 +1393,9 @@ namespace xstl {
                     out << static_cast<const _Elem*>("  ├─ ");
                 out << VALUE(node) << static_cast<_Elem>('\n');
                 if (!node->_left->_is_nil || !node->_right->_is_nil) {
-                    _visited[ size + 1 ] = true;
+                    _visited[size + 1] = true;
                     _display(node->_right, size + 1, 1);
-                    _visited[ size + 1 ] = false;
+                    _visited[size + 1] = false;
                     _display(node->_left, size + 1, 0);
                 }
             }
@@ -1620,10 +1620,12 @@ namespace xstl {
             if (!_res._curr->_is_nil && !_cmpr(key, KFN(_res._curr)))
                 return { _res._curr, false };
             _Tree_accessor::check_max_size(_Derptr());
-            const link_type _new_node = _Tree_temp_node<_Alnode_type>(_Tree_accessor::get_alnode(_Derptr()), _Tree_accessor::root(_Derptr()), std::piecewise_construct,
-                                                                      std::forward_as_tuple(std::forward<_Key>(key)), std::forward_as_tuple(std::forward<_Mapped>(mapped_value)...))
-                                            .release();
-
+            // clang-format off
+            const link_type _new_node = _Tree_temp_node<_Alnode_type>(_Tree_accessor::get_alnode(_Derptr()), 
+                _Tree_accessor::root(_Derptr()), std::piecewise_construct,
+                std::forward_as_tuple(std::forward<_Key>(key)), 
+                std::forward_as_tuple(std::forward<_Mapped>(mapped_value)...)).release();
+            // clang-format on
             return { _Tree_accessor::insert_at(_Derptr(), _res._pack, _new_node), true };
         }
 
@@ -1633,9 +1635,12 @@ namespace xstl {
             if (!_res._insertable)
                 return _Tree_accessor::make_iter(_Derptr(), _res._pack._parent);
             _Tree_accessor::check_max_size(_Derptr());
-            const link_type _new_node = _Tree_temp_node<_Alnode_type>(_Tree_accessor::get_alnode(_Derptr()), _Tree_accessor::root(_Derptr()), std::piecewise_construct,
-                                                                      std::forward_as_tuple(std::forward<_Key>(key)), std::forward_as_tuple(std::forward<_Mapped>(mapped_value)...))
-                                            .release();
+            // clang-format off
+            const link_type _new_node = _Tree_temp_node<_Alnode_type>(_Tree_accessor::get_alnode(_Derptr()), 
+                _Tree_accessor::root(_Derptr()), std::piecewise_construct,
+                std::forward_as_tuple(std::forward<_Key>(key)), 
+                std::forward_as_tuple(std::forward<_Mapped>(mapped_value)...)).release();
+            // clang-format on
             return _Tree_accessor::make_iter(_Derptr(), _Tree_accessor::insert_at(_Derptr(), _res._pack, _new_node));
         }
 
@@ -1648,9 +1653,13 @@ namespace xstl {
                 return { _Tree_accessor::make_iter(_Derptr(), _res._pack._parent), false };
             }
             _Tree_accessor::check_max_size(_Derptr());
+            // clang-format off
             const link_type _new_node =
-                _Tree_temp_node<_Alnode_type>(_Tree_accessor::get_alnode(_Derptr()), _Tree_accessor::root(_Derptr()), std::forward<_Key>(key), std::forward<_Mapped>(mapped_value)).release();
-
+                _Tree_temp_node<_Alnode_type>(_Tree_accessor::get_alnode(_Derptr()), 
+                    _Tree_accessor::root(_Derptr()), 
+                    std::forward<_Key>(key), 
+                    std::forward<_Mapped>(mapped_value)).release();
+            // clang-format on
             return { _Tree_accessor::make_iter(_Derptr(), _Tree_accessor::insert_at(_Derptr(), _res._pack, _new_node)), true };
         }
 
@@ -1662,8 +1671,13 @@ namespace xstl {
                 return _Tree_accessor::make_iter(_Derptr(), _res._pack._parent);
             }
             _Tree_accessor::check_max_size(_Derptr());
+            // clang-format off
             const link_type _new_node =
-                _Tree_temp_node<_Alnode_type>(_Tree_accessor::get_alnode(_Derptr()), _Tree_accessor::root(), std::forward<_Key>(key), std::forward<_Mapped>(mapped_value)).release();
+                _Tree_temp_node<_Alnode_type>(_Tree_accessor::get_alnode(_Derptr()), 
+                    _Tree_accessor::root(), 
+                    std::forward<_Key>(key), 
+                    std::forward<_Mapped>(mapped_value)).release();
+            // clang-format on
             return _Tree_accessor::make_iter(_Derptr(), _Tree_accessor::insert_at(_Derptr(), _res._pack, _new_node));
         }
 
@@ -2190,7 +2204,8 @@ namespace xstl {
                         if (_uncle->_color == RED) {
                             _uncle->_color = node->_parent->_color = BLACK;
                             node->_parent->_parent->_color         = RED;
-                            node                                   = node->_parent->_parent;
+
+                            node = node->_parent->_parent;
                         }
                         else {
                             if (node == node->_parent->_right) {
@@ -2207,7 +2222,8 @@ namespace xstl {
                         if (_uncle->_color == RED) {
                             _uncle->_color = node->_parent->_color = BLACK;
                             node->_parent->_parent->_color         = RED;
-                            node                                   = node->_parent->_parent;
+
+                            node = node->_parent->_parent;
                         }
                         else {
                             if (node->_parent->_left == node) {

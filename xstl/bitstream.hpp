@@ -1,6 +1,6 @@
 #ifndef _BITSTREAM_HPP_
 #define _BITSTREAM_HPP_
-//#include "bitstring.hpp"
+#include "bitstring.hpp"
 #include <bit>  //for little/big endian
 #include <ios>
 #include <limits>
@@ -51,8 +51,9 @@ namespace xstl {
         [[nodiscard]] bool     fail() const { return rdstate() & (badbit | failbit); }
         [[nodiscard]] bool     bad() const { return rdstate() & badbit; }
         [[nodiscard]] biostate rdstate() const { return _state; }
-        void                   setstate(biostate state) { clear(rdstate() | state); }
-        void                   clear(biostate state = goodbit);
+
+        void setstate(biostate state) { clear(rdstate() | state); }
+        void clear(biostate state = goodbit);
 
         [[nodiscard]] biostate exceptions() const { return _exception; }
         void                   exceptions(biostate except) {
@@ -160,9 +161,9 @@ namespace xstl {
      */
     template <class _Alloc>
     class basic_bitbuf {
-        using _Self     = basic_bitbuf<_Alloc>;
-        //using _Bstr     = basic_bitstring<default_block_type, typename std::allocator_traits<_Alloc>::template rebind_alloc<default_block_type>>;
-        //using _Bstr_ref = basic_bitstring_ref<default_block_type, typename std::allocator_traits<_Alloc>::template rebind_alloc<default_block_type>>;
+        using _Self = basic_bitbuf<_Alloc>;
+        // using _Bstr     = basic_bitstring<default_block_type, typename std::allocator_traits<_Alloc>::template rebind_alloc<default_block_type>>;
+        // using _Bstr_ref = basic_bitstring_ref<default_block_type, typename std::allocator_traits<_Alloc>::template rebind_alloc<default_block_type>>;
         template <class>
         friend class basic_ibitstream;
         enum { ALLOCATED = 0x0001, WRITABLE = 0x0002, READABLE = 0x0004, APPEND = 0x0008, ATEND = 0x0010 };
@@ -351,7 +352,7 @@ namespace xstl {
 
         ~basic_bitbuf() {
             if (_state & ALLOCATED)
-                _alloc.deallocate(( byte* const )_buf, _bufsz);
+                _alloc.deallocate((byte* const)_buf, _bufsz);
         }
 
     private:
@@ -529,7 +530,7 @@ namespace xstl {
         if (!(_state & READABLE) || _countg == 0)
             return 0;
         bitsize _maxcnt = (std::min)(count, _countg);
-        src.sputb(_buf[ _nextg ] >> _offg, (std::min)(_maxcnt, BYTE_BIT - _offg));
+        src.sputb(_buf[_nextg] >> _offg, (std::min)(_maxcnt, BYTE_BIT - _offg));
         if (_maxcnt - BYTE_BIT + _offg > 0)
             src.sputn(_buf + _nextg + 1, _maxcnt - BYTE_BIT + _offg);
         gbump(_maxcnt);
@@ -549,9 +550,9 @@ namespace xstl {
         if (_countg < count)
             count = _countg;
         if (std::cmp_greater_equal(BYTE_BIT - _offg, count))
-            set_bits(_res, 0, _buf[ _nextg ], _offg, _offg + count);
+            set_bits(_res, 0, _buf[_nextg], _offg, _offg + count);
         else
-            _res = (get_bits(_buf[ _nextg ], _offg, BYTE_BIT) << _offg) | (get_bits(_buf[ _nextg + 1 ], 0, count - BYTE_BIT + _offg) >> BYTE_BIT - _offg);
+            _res = (get_bits(_buf[_nextg], _offg, BYTE_BIT) << _offg) | (get_bits(_buf[_nextg + 1], 0, count - BYTE_BIT + _offg) >> BYTE_BIT - _offg);
         gbump(count);
         return static_cast<int_type>(_res);
     }
@@ -565,7 +566,7 @@ namespace xstl {
         bitsize       _offset     = 0;  // for current data block
         while (count > 0 && _countg > 0) {
             bitsize _maxcnt = std::min<bitsize>(std::min<bitsize>(BYTE_BIT - _offset, count), BYTE_BIT - _offg);
-            set_bits(*dst, _offset, _buf[ _nextg ], _offg, _offg + _maxcnt);
+            set_bits(*dst, _offset, _buf[_nextg], _offg, _offg + _maxcnt);
             gbump(_maxcnt);
             _offset += _maxcnt;
             if (_offset == BYTE_BIT)
@@ -615,11 +616,11 @@ namespace xstl {
         const byte _subval  = get_bits(value, BYTE_BIT - count, BYTE_BIT) << BYTE_BIT - count;
         for (; _countg > 0; _skipcnt += count) {
             if (BYTE_BIT - _offg >= count) {
-                if (get_bits(_buf[ _nextg ], _offg, _offg + count) << _offg != _subval)
+                if (get_bits(_buf[_nextg], _offg, _offg + count) << _offg != _subval)
                     break;
             }
             else {
-                if (((get_bits(_buf[ _nextg ], _offg, BYTE_BIT) << _offg) | (get_bits(_buf[ _nextg + 1 ], 0, count - BYTE_BIT + _offg) >> BYTE_BIT - _offg)) != _subval)
+                if (((get_bits(_buf[_nextg], _offg, BYTE_BIT) << _offg) | (get_bits(_buf[_nextg + 1], 0, count - BYTE_BIT + _offg) >> BYTE_BIT - _offg)) != _subval)
                     break;
             }
             gbump(count);
@@ -639,11 +640,11 @@ namespace xstl {
             if (_maxcnt > 0) {
                 _putcnt += _maxcnt;
                 for (bitsize i = _maxcnt; std::cmp_greater_equal(i, BYTE_BIT - _offp); i -= BYTE_BIT, ++src) {
-                    set_bits(_buf[ _nextp ], _offp, *src, 0, BYTE_BIT - _offp);
-                    set_bits(_buf[ ++_nextp ], 0, *src, BYTE_BIT - _offp, BYTE_BIT);
+                    set_bits(_buf[_nextp], _offp, *src, 0, BYTE_BIT - _offp);
+                    set_bits(_buf[++_nextp], 0, *src, BYTE_BIT - _offp, BYTE_BIT);
                 }
                 _countp -= static_cast<bitsize>(_maxcnt) - to_bit_idx(_maxcnt);
-                set_bits(_buf[ _nextp ], _offp, *src, 0, to_bit_idx(_maxcnt));
+                set_bits(_buf[_nextp], _offp, *src, 0, to_bit_idx(_maxcnt));
                 _offset = BYTE_BIT - _offp;
                 count -= _maxcnt;
                 pbump(to_bit_idx(_maxcnt));
@@ -674,7 +675,7 @@ namespace xstl {
             bitsize _size = count;
             if (_countp > 0) {
                 _size = std::min<bitsize>(BYTE_BIT - _offp, count);
-                set_bits(_buf[ _nextp ], _offp, value, 0, _size);
+                set_bits(_buf[_nextp], _offp, value, 0, _size);
                 value <<= _size;
                 pbump(_size);
             }
@@ -701,7 +702,7 @@ namespace xstl {
                     return pbackfail();
                 --_nextg, _offg = BYTE_BIT, _maxsz = count;
             }
-            set_bits(_res, count - _maxsz, _buf[ _nextg ], _offg - _maxsz, _offg);
+            set_bits(_res, count - _maxsz, _buf[_nextg], _offg - _maxsz, _offg);
             count -= _maxsz;
             gbump(-_maxsz);
         }
@@ -733,7 +734,7 @@ namespace xstl {
                     return pbackfail();
                 --_nextg, _offg = BYTE_BIT, _size = count;
             }
-            set_bits(_buf[ _nextg ], _offg - _size, value, count - _size, count);
+            set_bits(_buf[_nextg], _offg - _size, value, count - _size, count);
             count -= _size;
             gbump(-_size);
         }
@@ -755,11 +756,11 @@ namespace xstl {
         std::char_traits<byte>::copy(_newbuf, _buf, _oldsz);
         if (_state & ALLOCATED)
             _alloc.deallocate(_buf, _oldsz);
-        _buf           = _newbuf;
-        _bufsz         = _newsz;
-        _offp          = to_bit_idx(count);
-        _countp        = (_newsz - _oldsz) * BYTE_BIT - count;
-        _buf[ _nextp ] = get_bits(value, 0, count);
+        _buf         = _newbuf;
+        _bufsz       = _newsz;
+        _offp        = to_bit_idx(count);
+        _countp      = (_newsz - _oldsz) * BYTE_BIT - count;
+        _buf[_nextp] = get_bits(value, 0, count);
         if (count == BYTE_BIT)
             _nextp++;
         _state |= ALLOCATED;
@@ -840,7 +841,7 @@ namespace xstl {
     void basic_bios<_Alloc>::init(buf_type* pbuf) {
         if (std::endian::native == std::endian::big)
             setf(bios::bigendian);
-        ( void )pbuf;
+        (void)pbuf;
     }
 
     template <class _Alloc>
@@ -873,7 +874,7 @@ namespace xstl {
         using _Self = basic_ibitstream<_Alloc>;
         struct _Default_tag {};
         struct _Ignore_proxy {
-            char _value[ sizeof(long double) ]{};
+            char _value[sizeof(long double)]{};
             char _size = 0;  //[0, sizeof(long double)]
         };
 
@@ -895,7 +896,7 @@ namespace xstl {
                 else {
                     if constexpr (!std::is_same_v<_Ignore, _Default_tag>) {
                         constexpr bitsize _ignbits = TYPE_BIT(_Ignore);
-                        char              _curr[ sizeof(_Ignore) ]{};
+                        char              _curr[sizeof(_Ignore)]{};
                         for (bitsize _curcnt; ibs.rdbuf()->in_avail() >= _ignbits;) {
                             _curcnt = ibs._Gettp(reinterpret_cast<_Ignore&>(_curr));
                             if (reinterpret_cast<_Ignore&>(_curr) != ignore) {
@@ -1184,8 +1185,8 @@ namespace xstl {
         template <arithmetic_type _Tp>
         _Self& set_default_ignore(const _Tp& value);
 
-        _Self& operator>>(_Self& (*pf)( _Self& ));
-        _Self& operator>>(basic_bios<_Alloc>& (*pf)( basic_bios<_Alloc>& ));
+        _Self& operator>>(_Self& (*pf)(_Self&));
+        _Self& operator>>(basic_bios<_Alloc>& (*pf)(basic_bios<_Alloc>&));
         _Self& operator>>(bool& value) { return get(value); }
         template <arithmetic_type _Tp>
         _Self& operator>>(_Tp& value) {
@@ -1262,7 +1263,7 @@ namespace xstl {
                 else {
                     if (_delimbits >= each_count) {
                         if (to_bit_idx(each_count))
-                            reinterpret_cast<std::make_unsigned_t<byte>&>(_curres[ _Base::flags() & _Base::bigendian ? sizeof(_Delim) - _nbyte : _nbyte - 1 ]) >>= BYTE_BIT - to_bit_idx(each_count);
+                            reinterpret_cast<std::make_unsigned_t<byte>&>(_curres[_Base::flags() & _Base::bigendian ? sizeof(_Delim) - _nbyte : _nbyte - 1]) >>= BYTE_BIT - to_bit_idx(each_count);
                         _Base::rdbuf()->gbump(each_count - _delimbits);  // friend using
                     }
                     else {  // each_count > delimbits
@@ -1583,12 +1584,12 @@ namespace xstl {
     }
 
     template <class _Alloc>
-    basic_ibitstream<_Alloc>& basic_ibitstream<_Alloc>::operator>>(_Self& (*pf)( _Self& )) {
+    basic_ibitstream<_Alloc>& basic_ibitstream<_Alloc>::operator>>(_Self& (*pf)(_Self&)) {
         return pf(*this);
     }
 
     template <class _Alloc>
-    basic_ibitstream<_Alloc>& basic_ibitstream<_Alloc>::operator>>(basic_bios<_Alloc>& (*pf)( basic_bios<_Alloc>& )) {
+    basic_ibitstream<_Alloc>& basic_ibitstream<_Alloc>::operator>>(basic_bios<_Alloc>& (*pf)(basic_bios<_Alloc>&)) {
         pf(*this);
         return *this;
     }
@@ -1728,8 +1729,8 @@ namespace xstl {
         template <character_type _Elem>
         _Self& operator<<(const _Elem* str);
         _Self& operator<<(buf_type& buf);
-        _Self& operator<<(_Self& (*pf)( _Self& ));
-        _Self& operator<<(basic_bios<_Alloc>& (*pf)( basic_bios<_Alloc>& ));
+        _Self& operator<<(_Self& (*pf)(_Self&));
+        _Self& operator<<(basic_bios<_Alloc>& (*pf)(basic_bios<_Alloc>&));
 
         ~basic_obitstream() noexcept {}
 
@@ -1833,8 +1834,8 @@ namespace xstl {
         const sentry _ok(*this);
         if (!_ok && (_Base::setstate(bios::badbit), 1))
             return *this;
-        for (int i = 0; str[ i ] != static_cast<_Elem>('\0'); ++i)
-            put(str[ i ], TYPE_BIT(_Elem));
+        for (int i = 0; str[i] != static_cast<_Elem>('\0'); ++i)
+            put(str[i], TYPE_BIT(_Elem));
         return *this;
     }
 
@@ -1844,12 +1845,12 @@ namespace xstl {
     }
 
     template <class _Alloc>
-    basic_obitstream<_Alloc>& basic_obitstream<_Alloc>::operator<<(_Self& (*pf)( _Self& )) {
+    basic_obitstream<_Alloc>& basic_obitstream<_Alloc>::operator<<(_Self& (*pf)(_Self&)) {
         return pf(*this);
     }
 
     template <class _Alloc>
-    basic_obitstream<_Alloc>& basic_obitstream<_Alloc>::operator<<(basic_bios<_Alloc>& (*pf)( basic_bios<_Alloc>& )) {
+    basic_obitstream<_Alloc>& basic_obitstream<_Alloc>::operator<<(basic_bios<_Alloc>& (*pf)(basic_bios<_Alloc>&)) {
         pf(*this);
         return *this;
     }
