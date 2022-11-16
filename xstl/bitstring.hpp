@@ -201,7 +201,8 @@ namespace xstl {
             [[nodiscard]] bool operator==(const const_reference& rhs) const noexcept { return std::addressof(_bstr) == std::addressof(rhs._bstr) && _index == rhs._index; }  // for iterators
             [[nodiscard]] bool operator!=(const const_reference& rhs) const noexcept { return !(*this == rhs); }
 
-                 operator bool() const { return unchecked_get(_bstr, _index); }
+            operator bool() const { return unchecked_get(_bstr, _index); }
+
             bool operator~() const { return static_cast<bool>(*this) == 0; }
 
             difference_type operator-(const const_reference& cref) const { return _index - cref._index; }
@@ -236,32 +237,32 @@ namespace xstl {
             friend void swap(reference& x, reference& y) { x.swap(y); }
 
             reference& operator=(bool x) {
-                set_bit(_Bstr_accessor::get_vec(_bstr)[ to_block_idx<block_type>(_index) ], to_bit_idx<block_type>(_index), x);
+                set_bit(_Bstr_accessor::get_vec(_bstr)[to_block_idx<block_type>(_index)], to_bit_idx<block_type>(_index), x);
                 return *this;
             }
             reference& operator=(const reference& rhs) {
-                set_bit(_Bstr_accessor::get_vec(_bstr)[ to_block_idx<block_type>(_index) ], to_bit_idx<block_type>(_index), static_cast<bool>(rhs));
+                set_bit(_Bstr_accessor::get_vec(_bstr)[to_block_idx<block_type>(_index)], to_bit_idx<block_type>(_index), static_cast<bool>(rhs));
                 return *this;
             }
 
             reference& operator|=(bool x) {
-                if (x && (_Bstr_accessor::get_vec(_bstr)[ to_block_idx<block_type>(_index) ] |= (block_type{ 1 } << TYPE_BIT(block_type) - to_bit_idx<block_type>(_index) - 1)))
+                if (x && (_Bstr_accessor::get_vec(_bstr)[to_block_idx<block_type>(_index)] |= (block_type{ 1 } << TYPE_BIT(block_type) - to_bit_idx<block_type>(_index) - 1)))
                     ;
                 return *this;
             }
             reference& operator&=(bool x) {
                 if (!x)
-                    clear_bit(_Bstr_accessor::get_vec(_bstr)[ to_block_idx<block_type>(_index) ], to_bit_idx<block_type>(_index));
+                    clear_bit(_Bstr_accessor::get_vec(_bstr)[to_block_idx<block_type>(_index)], to_bit_idx<block_type>(_index));
                 return *this;
             }
             reference& operator^=(bool x) {
-                if (x && (_Bstr_accessor::get_vec(_bstr)[ to_block_idx<block_type>(_index) ] ^= (block_type{ 1 } << TYPE_BIT(block_type) - to_bit_idx<block_type>(_index) - 1)))
+                if (x && (_Bstr_accessor::get_vec(_bstr)[to_block_idx<block_type>(_index)] ^= (block_type{ 1 } << TYPE_BIT(block_type) - to_bit_idx<block_type>(_index) - 1)))
                     ;
                 return *this;
             }
             reference& operator-=(bool x) {
                 if (x)
-                    clear_bit(_Bstr_accessor::get_vec(_bstr)[ to_block_idx<block_type>(_index) ], to_bit_idx<block_type>(_index));
+                    clear_bit(_Bstr_accessor::get_vec(_bstr)[to_block_idx<block_type>(_index)], to_bit_idx<block_type>(_index));
                 return *this;
             }
         };
@@ -295,14 +296,14 @@ namespace xstl {
     public:
         allocator_type& get_allocator() const noexcept { return _Bstr_accessor::get_vec(*this).get_allocator(); }
 
-        reference       front() { return (*this)[ 0 ]; }
-        const_reference front() const { return (*this)[ 0 ]; }
-        reference       back() { return (*this)[ _size - 1 ]; }
-        const_reference back() const { return (*this)[ _size - 1 ]; }
+        reference       front() { return (*this)[0]; }
+        const_reference front() const { return (*this)[0]; }
+        reference       back() { return (*this)[_size - 1]; }
+        const_reference back() const { return (*this)[_size - 1]; }
 
         _Bstr substr(size_type index = 0, size_type n = npos) const {
             check_npos(*this, index, n);
-            return _Bstr((*this)[ range_index(index, index + n) ]);
+            return _Bstr((*this)[range_index(index, index + n)]);
         }
 
         _Self& set(size_type index, size_type n, bool value /* = true */);
@@ -343,7 +344,7 @@ namespace xstl {
         [[nodiscard]] _Bstr_ref       at(size_t first, size_t last) { return const_cast<_Self*>(this)->_Derptr()->at(range_index(first, last)); }
         [[nodiscard]] const _Bstr_ref at(size_t first, size_t last) const { return const_cast<_Self*>(this)->at(first, last); }
         [[nodiscard]] const _Bstr_ref at(range_index index) const { return const_cast<_Self*>(this)->_Derptr()->at(index); }
-        [[nodiscard]] const _Bstr_ref operator[](range_index index) const { return (*const_cast<_Self*>(this)->_Derptr())[ index ]; }
+        [[nodiscard]] const _Bstr_ref operator[](range_index index) const { return (*const_cast<_Self*>(this)->_Derptr())[index]; }
 
         template <class _String = std::string>
         [[nodiscard]] _String to_string(typename _String::value_type elem0 = static_cast<typename _String::value_type>('0'),
@@ -378,8 +379,7 @@ namespace xstl {
         template <character_type _Elem>
         size_type find(const _Elem* str, size_type index = 0, _Elem elem0 = static_cast<_Elem>('0'), _Elem elem1 = static_cast<_Elem>('1')) const noexcept {
             return _Find(
-                str, std::char_traits<_Elem>::length(str), [ & ](size_type index) { return str[ index ]; }, [](const _Elem elem) { return elem == elem0; },
-                [](const _Elem elem) { return elem == elem1; });
+                str, std::char_traits<_Elem>::length(str), [&](size_type index) { return str[index]; }, [](const _Elem elem) { return elem == elem0; }, [](const _Elem elem) { return elem == elem1; });
         }
 
         void assign(size_type n, bool value) {
@@ -388,7 +388,7 @@ namespace xstl {
         }
         template <class _Iter>
         void assign(_Iter binary_first, _Iter binary_last) {
-            size_type _index = set_from_range(0, binary_first, binary_last, [ & ](size_type i) { return i < _size; });
+            size_type _index = set_from_range(0, binary_first, binary_last, [&](size_type i) { return i < _size; });
             if (_index == _size)
                 _Derptr()->insert(cend(), binary_first, binary_last);
             else
@@ -400,7 +400,7 @@ namespace xstl {
         }
         template <character_type _Elem>
         void assign(const _Elem* str, size_type str_count, _Elem elem0 = static_cast<_Elem>('0'), _Elem elem1 = static_cast<_Elem>('1')) {
-            size_type i = set_from_c_str(0, str, str_count, elem0, elem1, [ & ](size_type i) { return i < _size && !std::char_traits<_Elem>::eq(str[ i ], static_cast<_Elem>('\0')); });
+            size_type i = set_from_c_str(0, str, str_count, elem0, elem1, [&](size_type i) { return i < _size && !std::char_traits<_Elem>::eq(str[i], static_cast<_Elem>('\0')); });
             if (i == _size)
                 _Derptr()->insert(i, str + i, str_count - i);
             else
@@ -487,8 +487,7 @@ namespace xstl {
                         if (_Traits::eq_int_type(_Traits::eof(), os.rdbuf()->sputc(os.fill())))
                             return os.setstate(_Ostream::badbit), os;
                     os.width(0);
-                }
-                catch (...) {
+                } catch (...) {
                     os.setstate(_Ostream::badbit);
                     throw;
                 }
@@ -516,19 +515,19 @@ namespace xstl {
         }
 
         inline _Self& unchecked_set(size_type index, bool value) noexcept {
-            set_bit(_Bstr_accessor::get_vec(*this)[ to_block_idx<block_type>(abspos(index)) ], to_bit_idx<block_type>(abspos(index)), value);
+            set_bit(_Bstr_accessor::get_vec(*this)[to_block_idx<block_type>(abspos(index))], to_bit_idx<block_type>(abspos(index)), value);
             return *this;
         }
 
         template <class _Other>
         inline static bool unchecked_get(const bitstring_base<_Block, _Alloc, _Other>& bstr, size_type index) noexcept {
-            return get_bit(_Bstr_accessor::get_vec(bstr)[ to_block_idx<block_type>(index) ], to_bit_idx<block_type>(index));
+            return get_bit(_Bstr_accessor::get_vec(bstr)[to_block_idx<block_type>(index)], to_bit_idx<block_type>(index));
         }
 
         template <class _PartOp, class _FullOp>
         inline _Self& range_operation(size_type index, size_type n, _PartOp partial_operation, _FullOp full_operation) noexcept {
             const size_type _bit_idx = to_bit_idx<block_type>(index);
-            block_type*     _node    = std::addressof(_Bstr_accessor::get_vec(*this)[ to_block_idx<block_type>(index) ]);
+            block_type*     _node    = std::addressof(_Bstr_accessor::get_vec(*this)[to_block_idx<block_type>(index)]);
             if (_bit_idx) {
                 if (_bit_idx + n <= TYPE_BIT(block_type)) {
                     partial_operation(*_node, _bit_idx, _bit_idx + n);
@@ -546,7 +545,7 @@ namespace xstl {
 
         template <class _Other, class _Fn>
         inline _Self& range_operation /*_with*/ (size_type index, const bitstring_base<_Block, _Alloc, _Other>& bstr, size_type bstr_index, size_type bstr_count, _Fn operation) {
-            block_type*     _node   = std::addressof(_Bstr_accessor::get_vec(*this)[ to_block_idx<block_type>(index) ]);
+            block_type*     _node   = std::addressof(_Bstr_accessor::get_vec(*this)[to_block_idx<block_type>(index)]);
             const size_type _maxcnt = bstr_index + bstr_count;
             for (const size_type _bit_idx = to_bit_idx<block_type>(index);; bstr_index += TYPE_BIT(block_type)) {
                 const block_type _curr = _Bstr_accessor::get_block(bstr, bstr_index, _maxcnt);
@@ -599,9 +598,9 @@ namespace xstl {
         size_type set_from_c_str(size_type beg, const _Elem* str, size_type str_count, _Elem elem0, _Elem elem1, _Pred pred) {
             size_type i = 0;
             while (pred(i)) {
-                if (std::char_traits<_Elem>::eq(str[ i ], elem1))
+                if (std::char_traits<_Elem>::eq(str[i], elem1))
                     unchecked_set(beg + i++, true);
-                else if (std::char_traits<_Elem>::eq(str[ i ], elem0))
+                else if (std::char_traits<_Elem>::eq(str[i], elem0))
                     unchecked_set(beg + i++, false);
                 else
                     throw std::invalid_argument("invaild bitstring char");
@@ -612,7 +611,7 @@ namespace xstl {
         template <class _Tp>
         void set_from_type(size_type index, const _Tp& value, size_type n) {
             const size_type _block_idx = to_block_idx<block_type>(abspos(index)), _bit_idx = to_bit_idx<block_type>(abspos(index)), _oldn = n;
-            block_type*     _node = std::addressof(_Bstr_accessor::get_vec(*this)[ _block_idx ]);
+            block_type*     _node = std::addressof(_Bstr_accessor::get_vec(*this)[_block_idx]);
             size_type       i     = 0;
             for (; n >= TYPE_BIT(block_type); n -= TYPE_BIT(block_type), ++i) {
                 set_bits(*_node, _bit_idx, value, i * TYPE_BIT(block_type), (i + 1) * TYPE_BIT(block_type) - _bit_idx);
@@ -629,13 +628,13 @@ namespace xstl {
         inline block_type get_block(const size_type index, const size_type maxsz) const noexcept {
             const size_type _block_idx = to_block_idx<block_type>(index), _bit_idx = to_bit_idx<block_type>(index);
             return TYPE_BIT(block_type) - _bit_idx >= maxsz - index
-                       ? _Bstr_accessor::get_vec(*this)[ _block_idx ] << _bit_idx
-                       : _Bstr_accessor::get_vec(*this)[ _block_idx ] << _bit_idx | _Bstr_accessor::get_vec(*this)[ _block_idx + 1 ] >> TYPE_BIT(block_type) - _bit_idx;
+                       ? _Bstr_accessor::get_vec(*this)[_block_idx] << _bit_idx
+                       : _Bstr_accessor::get_vec(*this)[_block_idx] << _bit_idx | _Bstr_accessor::get_vec(*this)[_block_idx + 1] >> TYPE_BIT(block_type) - _bit_idx;
         }
 
         inline block_type get_block(const block_type* ptr, const size_type index, const size_type maxsz) const noexcept {
             const size_type _bit_idx = to_bit_idx<block_type>(index);
-            return TYPE_BIT(block_type) - _bit_idx >= maxsz - index ? *ptr << _bit_idx : *ptr << _bit_idx | ptr[ 1 ] >> TYPE_BIT(block_type) - _bit_idx;
+            return TYPE_BIT(block_type) - _bit_idx >= maxsz - index ? *ptr << _bit_idx : *ptr << _bit_idx | ptr[1] >> TYPE_BIT(block_type) - _bit_idx;
         }
 
         inline void check_index_exclusive(const size_type index, const char* msg = "invalid bitstring position") const {  // checks whether index is in the bounds of[0, size())
@@ -658,7 +657,7 @@ namespace xstl {
 
         template <class _Other>
         void xswap(bitstring_base<_Block, _Alloc, _Other>& bstr) {
-            static auto _exchange = [ & ] {
+            static auto _exchange = [&] {
                 *this ^= bstr;
                 bstr ^= *this;
                 *this ^= bstr;
@@ -691,21 +690,21 @@ namespace xstl {
         const size_type  _beg_block = to_block_idx<block_type>(index), _beg_bit = to_bit_idx<block_type>(index);
         const size_type  _width = to_block_idx<block_type>(n + _beg_bit), _shift_bit = to_bit_idx<block_type>(n);
         const size_type  _first_need = TYPE_BIT(block_type) - _beg_bit, _start_bit = to_bit_idx<block_type>(_beg_bit + _shift_bit);
-        block_type*      _node = std::addressof(_Bstr_accessor::get_vec(*this)[ _beg_block ]);
+        block_type*      _node = std::addressof(_Bstr_accessor::get_vec(*this)[_beg_block]);
         signed_size_type _left = maxsz - n - _first_need;  // left bits after shifting the first block
         if (_left <= 0)
-            set_bits<block_type, block_type>(*_node, _beg_bit, (_node[ _width ] << _start_bit) | (_node[ _width + 1 ] >> TYPE_BIT(block_type) - _start_bit), 0, maxsz - n);
+            set_bits<block_type, block_type>(*_node, _beg_bit, (_node[_width] << _start_bit) | (_node[_width + 1] >> TYPE_BIT(block_type) - _start_bit), 0, maxsz - n);
         else {
-            set_bits<block_type, block_type>(*_node, _beg_bit, (_node[ _width ] << _start_bit) | (_node[ _width + 1 ] >> TYPE_BIT(block_type) - _start_bit), 0, _first_need);
+            set_bits<block_type, block_type>(*_node, _beg_bit, (_node[_width] << _start_bit) | (_node[_width + 1] >> TYPE_BIT(block_type) - _start_bit), 0, _first_need);
             if (_beg_bit > _start_bit) {                                                                                    //_ptr[_width] hasn't used up yet
                 for (++_node; std::cmp_greater_equal(_left, TYPE_BIT(block_type)); _left -= TYPE_BIT(block_type), ++_node)  // suppress C6259
-                    *_node = (_node[ _width - 1 ] << TYPE_BIT(block_type) - _start_bit + _first_need) | (_node[ _width ] >> _start_bit - _first_need);
-                set_bits<block_type, block_type>(*_node, 0, (_node[ _width - 1 ] << TYPE_BIT(block_type) - _start_bit + _first_need) | (_node[ _width ] >> _start_bit - _first_need), 0, _left);
+                    *_node = (_node[_width - 1] << TYPE_BIT(block_type) - _start_bit + _first_need) | (_node[_width] >> _start_bit - _first_need);
+                set_bits<block_type, block_type>(*_node, 0, (_node[_width - 1] << TYPE_BIT(block_type) - _start_bit + _first_need) | (_node[_width] >> _start_bit - _first_need), 0, _left);
             }
             else {
                 for (++_node; std::cmp_greater_equal(_left, TYPE_BIT(block_type)); _left -= TYPE_BIT(block_type), ++_node)
-                    *_node = (_node[ _width ] << _shift_bit) | (_node[ _width + 1 ] >> TYPE_BIT(block_type) - _shift_bit);
-                set_bits<block_type, block_type>(*_node, 0, (_node[ _width ] << _shift_bit) | (_node[ _width + 1 ] >> TYPE_BIT(block_type) - _shift_bit), 0, _left);
+                    *_node = (_node[_width] << _shift_bit) | (_node[_width + 1] >> TYPE_BIT(block_type) - _shift_bit);
+                set_bits<block_type, block_type>(*_node, 0, (_node[_width] << _shift_bit) | (_node[_width + 1] >> TYPE_BIT(block_type) - _shift_bit), 0, _left);
             }
         }
     }
@@ -719,25 +718,24 @@ namespace xstl {
             _end_bit = TYPE_BIT(block_type), --_end_block;
         const signed_size_type _width     = std::floor(1.0 * static_cast<signed_size_type>(_end_bit - n) / static_cast<signed_size_type>(TYPE_BIT(block_type)));
         const size_type        _start_bit = to_bit_idx<block_type>(index + maxsz - n), _shift_bit = to_bit_idx<block_type>(n);
-        block_type*            _node = std::addressof(_Bstr_accessor::get_vec(*this)[ _end_block ]);
+        block_type*            _node = std::addressof(_Bstr_accessor::get_vec(*this)[_end_block]);
         signed_size_type       _left = maxsz - n - _end_bit;  // left bits after shifting the first block
         if (_left <= 0)
-            set_bits<block_type, block_type>(*_node, _end_bit - maxsz + n, (_node[ _width ] >> TYPE_BIT(block_type) - _start_bit) | (_node[ _width - 1 ] << _start_bit),
-                                             TYPE_BIT(block_type) - maxsz + n, TYPE_BIT(block_type));
+            set_bits<block_type, block_type>(*_node, _end_bit - maxsz + n, (_node[_width] >> TYPE_BIT(block_type) - _start_bit) | (_node[_width - 1] << _start_bit), TYPE_BIT(block_type) - maxsz + n,
+                                             TYPE_BIT(block_type));
         else {
-            set_bits<block_type, block_type>(*_node, 0, (_node[ _width ] >> TYPE_BIT(block_type) - _start_bit) | (_node[ _width - 1 ] << _start_bit), TYPE_BIT(block_type) - _end_bit,
+            set_bits<block_type, block_type>(*_node, 0, (_node[_width] >> TYPE_BIT(block_type) - _start_bit) | (_node[_width - 1] << _start_bit), TYPE_BIT(block_type) - _end_bit,
                                              TYPE_BIT(block_type));
             if (_start_bit > _end_bit) {  //_ptr[_width] hasn't used up yet
                 for (--_node; std::cmp_greater_equal(_left, TYPE_BIT(block_type)); _left -= TYPE_BIT(block_type), --_node)
-                    *_node = (_node[ _width + 1 ] >> TYPE_BIT(block_type) - _start_bit + _end_bit) | (_node[ _width ] << _start_bit - _end_bit);
-                set_bits<block_type, block_type>(*_node, TYPE_BIT(block_type) - _left,
-                                                 (_node[ _width + 1 ] >> TYPE_BIT(block_type) - _start_bit + _end_bit) | (_node[ _width ] << _start_bit - _end_bit), TYPE_BIT(block_type) - _left,
-                                                 TYPE_BIT(block_type));
+                    *_node = (_node[_width + 1] >> TYPE_BIT(block_type) - _start_bit + _end_bit) | (_node[_width] << _start_bit - _end_bit);
+                set_bits<block_type, block_type>(*_node, TYPE_BIT(block_type) - _left, (_node[_width + 1] >> TYPE_BIT(block_type) - _start_bit + _end_bit) | (_node[_width] << _start_bit - _end_bit),
+                                                 TYPE_BIT(block_type) - _left, TYPE_BIT(block_type));
             }
             else {
                 for (--_node; std::cmp_greater_equal(_left, TYPE_BIT(block_type)); _left -= TYPE_BIT(block_type), --_node)
-                    *_node = (_node[ _width ] >> _shift_bit) | (_node[ _width - 1 ] << TYPE_BIT(block_type) - _shift_bit);
-                set_bits<block_type, block_type>(*_node, TYPE_BIT(block_type) - _left, (_node[ _width ] >> _shift_bit) | (_node[ _width - 1 ] << TYPE_BIT(block_type) - _shift_bit),
+                    *_node = (_node[_width] >> _shift_bit) | (_node[_width - 1] << TYPE_BIT(block_type) - _shift_bit);
+                set_bits<block_type, block_type>(*_node, TYPE_BIT(block_type) - _left, (_node[_width] >> _shift_bit) | (_node[_width - 1] << TYPE_BIT(block_type) - _shift_bit),
                                                  TYPE_BIT(block_type) - _left, TYPE_BIT(block_type));
             }
         }
@@ -769,7 +767,7 @@ namespace xstl {
     template <std::unsigned_integral _Block, class _Alloc, class _Derived>
     bitstring_base<_Block, _Alloc, _Derived>& bitstring_base<_Block, _Alloc, _Derived>::flip(size_type index) {
         check_index_exclusive(index);
-        flip_bit(_Bstr_accessor::get_vec(*this)[ to_block_idx<block_type>(abspos(index)) ], to_bit_idx<block_type>(abspos(index)));
+        flip_bit(_Bstr_accessor::get_vec(*this)[to_block_idx<block_type>(abspos(index))], to_bit_idx<block_type>(abspos(index)));
         return *this;
     }
 
@@ -888,7 +886,7 @@ namespace xstl {
     template <class _String>
     void bitstring_base<_Block, _Alloc, _Derived>::to_string(_String& str, size_type index, size_type n, typename _String::value_type elem0, typename _String::value_type elem1) const {
         check_npos(*this, index, n);
-        const block_type* _node = std::addressof(_Bstr_accessor::get_vec(*this)[ to_block_idx<block_type>(abspos(index)) ]);
+        const block_type* _node = std::addressof(_Bstr_accessor::get_vec(*this)[to_block_idx<block_type>(abspos(index))]);
         for (size_type _bit_idx = to_bit_idx<block_type>(abspos(index)); n--; _bit_idx = _bit_idx == 7 ? ++_node, 0 : _bit_idx + 1)
             str.push_back(get_bit(*_node, _bit_idx) ? elem1 : elem0);
     }
@@ -925,7 +923,7 @@ namespace xstl {
         //_bit_idx + n <= block_bits
         if constexpr (std::endian::native == std::endian::big) {
             const size_type _bit_idx = to_bit_idx<block_type>(index);
-            value                    = get_bits(_Bstr_accessor::get_vec(*this)[ to_block_idx<block_type>(index) ], _bit_idx, _bit_idx + n) >> sizeof(_Tp) * CHAR_BIT - _bit_idx - n;
+            value                    = get_bits(_Bstr_accessor::get_vec(*this)[to_block_idx<block_type>(index)], _bit_idx, _bit_idx + n) >> sizeof(_Tp) * CHAR_BIT - _bit_idx - n;
         }
         else {
         }
@@ -942,7 +940,7 @@ namespace xstl {
         check_index_exclusive(index);
         const bool _oldbit = unchecked_get(*this, abspos(index));
         if (_oldbit ^ value)
-            flip_bit(_Bstr_accessor::get_vec(*this)[ to_block_idx<block_type>(abspos(index)) ], to_bit_idx<block_type>(abspos(index)));
+            flip_bit(_Bstr_accessor::get_vec(*this)[to_block_idx<block_type>(abspos(index))], to_bit_idx<block_type>(abspos(index)));
         return _oldbit;
     }
 
@@ -950,7 +948,7 @@ namespace xstl {
     bool bitstring_base<_Block, _Alloc, _Derived>::all() const {
         const size_type   _beg_bit = to_bit_idx<block_type>(abspos(0));
         size_type         n        = _size;
-        const block_type* _node    = std::addressof(_Bstr_accessor::get_vec(*this)[ to_block_idx<block_type>(abspos(0)) ]);
+        const block_type* _node    = std::addressof(_Bstr_accessor::get_vec(*this)[to_block_idx<block_type>(abspos(0))]);
         if (_beg_bit) {
             if (_size + _beg_bit <= TYPE_BIT(block_type))
                 return get_bits(*_node, _beg_bit, _beg_bit + _size) == get_bits((std::numeric_limits<block_type>::max)(), _beg_bit, _beg_bit + _size);
@@ -969,7 +967,7 @@ namespace xstl {
     bool bitstring_base<_Block, _Alloc, _Derived>::any() const {
         const size_type   _beg_bit = to_bit_idx<block_type>(abspos(0));
         size_type         n        = _size;
-        const block_type* _node    = std::addressof(_Bstr_accessor::get_vec(*this)[ to_block_idx<block_type>(abspos(0)) ]);
+        const block_type* _node    = std::addressof(_Bstr_accessor::get_vec(*this)[to_block_idx<block_type>(abspos(0))]);
         if (_beg_bit) {
             if (_size + _beg_bit <= TYPE_BIT(block_type))
                 return get_bits(*_node, _beg_bit, _beg_bit + _size) > 0;
@@ -1002,11 +1000,11 @@ namespace xstl {
                                                "\3\4\4\5\4\5\5\6\4\5\5\6\5\6\6\7"
                                                "\4\5\5\6\5\6\6\7\5\6\6\7\6\7\7\b";
         size_type                _count      = 0;
-        constexpr auto           _count_full = [ & ](block_type value) {
+        constexpr auto           _count_full = [&](block_type value) {
             for (size_type i = 0; i < sizeof(block_type); ++i)
-                _count += _bits_table[ *(reinterpret_cast<byte*>(std::addressof(value)) + i) ];
+                _count += _bits_table[*(reinterpret_cast<byte*>(std::addressof(value)) + i)];
         };
-        constexpr auto _count_partial = [ & ](block_type value, size_type first, size_type last) { _count_full(get_bits(value, first, last)); };
+        constexpr auto _count_partial = [&](block_type value, size_type first, size_type last) { _count_full(get_bits(value, first, last)); };
         const_cast<_Self&>(*this).range_operation(abspos(0), _size, _count_partial, _count_full);  // XD
         return _count;
     }
@@ -1015,7 +1013,7 @@ namespace xstl {
     bool bitstring_base<_Block, _Alloc, _Derived>::operator==(const _Self& rhs) const {
         if (_size != rhs._size)
             return false;
-        const block_type* _node    = std::addressof(_Bstr_accessor::get_vec(*this)[ to_block_idx<block_type>(abspos(0)) ]);
+        const block_type* _node    = std::addressof(_Bstr_accessor::get_vec(*this)[to_block_idx<block_type>(abspos(0))]);
         const size_type   _bit_idx = to_bit_idx<block_type>(abspos(0));
         for (size_type _beg = _Bstr_accessor::get_begin(rhs); _beg < _Bstr_accessor::get_begin(rhs) + rhs.size(); _beg += TYPE_BIT(block_type))
             if (get_block(_node, _bit_idx, _size) != rhs.get_block(_beg, rhs._size))
@@ -1027,7 +1025,7 @@ namespace xstl {
     std::strong_ordering bitstring_base<_Block, _Alloc, _Derived>::operator<=>(const _Self& rhs) const {
         if (_size != rhs._size)
             return _size <=> rhs._size;
-        const block_type* _node    = std::addressof(_Bstr_accessor::get_vec(*this)[ to_block_idx<block_type>(abspos(0)) ]);
+        const block_type* _node    = std::addressof(_Bstr_accessor::get_vec(*this)[to_block_idx<block_type>(abspos(0))]);
         const size_type   _bit_idx = to_bit_idx<block_type>(abspos(0));
         for (size_type _beg = _Bstr_accessor::get_begin(rhs); _beg < _Bstr_accessor::get_begin(rhs) + rhs.size(); _beg += TYPE_BIT(block_type))
             if (std::strong_ordering _res = get_block(_node, _bit_idx, _size) <=> rhs.get_block(_beg, rhs._size); _res != std::strong_ordering::equivalent)
@@ -1181,11 +1179,11 @@ namespace xstl {
         void append(_Iter binary_first, _Iter binary_last);
         template <character_type _Elem>
         void append(const _Elem* str, _Elem elem0 = static_cast<_Elem>('0'), _Elem elem1 = static_cast<_Elem>('1')) {
-            _Append_from_c_str(str, elem0, elem1, [ & ](size_type i) { return !std::char_traits<_Elem>::eq(str[ i ], static_cast<_Elem>('\0')); });
+            _Append_from_c_str(str, elem0, elem1, [&](size_type i) { return !std::char_traits<_Elem>::eq(str[i], static_cast<_Elem>('\0')); });
         }
         template <character_type _Elem>
         void append(const _Elem* str, size_type str_count, _Elem elem0 = static_cast<_Elem>('0'), _Elem elem1 = static_cast<_Elem>('1')) {
-            _Append_from_c_str(str, elem0, elem1, [ & ](size_type i) { return i < str_count; });  // assert fail if str_count > the real size
+            _Append_from_c_str(str, elem0, elem1, [&](size_type i) { return i < str_count; });  // assert fail if str_count > the real size
         }
         template <class _Other>
         void append(const bitstring_base<_Block, _Alloc, _Other>& bstr, typename bitstring_base<_Block, _Alloc, _Other>::size_type bstr_index = 0,
@@ -1258,8 +1256,7 @@ namespace xstl {
                         else
                             bstr.push_back(_Traits::eq(_curr, '1') ? 1 : 0), _changed = true;
                     }
-                }
-                catch (...) {
+                } catch (...) {
                     is.setstate(_Istream::badbit);
                     throw;
                 }
@@ -1279,9 +1276,9 @@ namespace xstl {
         template <class _Elem, class _Pred>
         void _Append_from_c_str(const _Elem* str, _Elem elem0, _Elem elem1, _Pred pred) {
             for (size_type i = 0; pred(i); ++i) {
-                if (std::char_traits<_Elem>::eq(str[ i ], elem1))
+                if (std::char_traits<_Elem>::eq(str[i], elem1))
                     push_back(true);
-                else if (std::char_traits<_Elem>::eq(str[ i ], elem0))
+                else if (std::char_traits<_Elem>::eq(str[i], elem0))
                     push_back(false);
                 else
                     throw std::invalid_argument("invaild bitstring char");
@@ -1350,7 +1347,7 @@ namespace xstl {
             if constexpr (_Check::value)
                 check_index(index);
             _Right_move(index, str_count);
-            _Base::set_from_c_str(index, str, str_count, elem0, elem1, [ = ](size_type i) { return i < str_count; });
+            _Base::set_from_c_str(index, str, str_count, elem0, elem1, [=](size_type i) { return i < str_count; });
         }
         return *this;
     }
@@ -1442,7 +1439,7 @@ namespace xstl {
 #if !defined(_NO_BSTRING_SAFETY_VERIFY_) && !defined(_NO_XSTL_SAFATRY_VERIFY_)
         assert(("bitstring empty before pop", _size != 0));
 #endif
-        clear_bit(_vec[ to_block_idx<block_type>(_size) ], to_bit_idx<block_type>(_size));
+        clear_bit(_vec[to_block_idx<block_type>(_size)], to_bit_idx<block_type>(_size));
         --_size;
     }
 
@@ -1576,7 +1573,7 @@ namespace xstl {
 
         _Self& insert(size_type index, size_type n, bool value) {
             check_index(index);
-            _Size_fix_operation([ & ] { _bstr.insert<std::false_type>(_beg + index, n, value); });
+            _Size_fix_operation([&] { _bstr.insert<std::false_type>(_beg + index, n, value); });
             return *this;
         }
         template <character_type _Elem>
@@ -1586,14 +1583,14 @@ namespace xstl {
         template <character_type _Elem>
         _Self& insert(size_type index, const _Elem* str, size_type str_count, _Elem elem0 = static_cast<_Elem>('0'), _Elem elem1 = static_cast<_Elem>('1')) {
             check_index(index);
-            _Size_fix_operation([ & ] { _bstr.insert<_Elem, std::false_type>(_beg + index, str, str_count, elem0, elem1); });
+            _Size_fix_operation([&] { _bstr.insert<_Elem, std::false_type>(_beg + index, str, str_count, elem0, elem1); });
             return *this;
         }
         template <class _Other>
         _Self& insert(size_type index, const bitstring_base<_Block, _Alloc, _Other>& bstr, typename bitstring_base<_Block, _Alloc, _Other>::size_type bstr_index = 0,
                       typename bitstring_base<_Block, _Alloc, _Other>::size_type bstr_count = npos) {
             check_index(index);
-            _Size_fix_operation([ & ] { _bstr.insert<_Other, std::false_type>(_beg + index, bstr, bstr_index, bstr_count); });
+            _Size_fix_operation([&] { _bstr.insert<_Other, std::false_type>(_beg + index, bstr, bstr_index, bstr_count); });
             return *this;
         }
 
@@ -1605,30 +1602,30 @@ namespace xstl {
         }
         template <class _Iter>
         iterator insert(const_iterator position, _Iter binary_first, _Iter binary_last) {
-            _Size_fix_operation([ & ] { _bstr.insert(_bstr.cbegin() + position->_Get_index(), binary_first, binary_last); });
+            _Size_fix_operation([&] { _bstr.insert(_bstr.cbegin() + position->_Get_index(), binary_first, binary_last); });
             return iterator(_Bstr_accessor::make_reference(*this, position->_Get_index()), this);
         }
 
         template <class _Tp>
         iterator insert_type(size_type index, const _Tp& value, size_type n = TYPE_BIT(_Tp)) {
             check_index(index);
-            _Size_fix_operation([ & ] { _bstr.insert_type<_Tp, std::false_type>(_beg + index, value, n); });
+            _Size_fix_operation([&] { _bstr.insert_type<_Tp, std::false_type>(_beg + index, value, n); });
             return iterator(_Bstr_accessor::make_reference(*this, index), this);
         }
         template <class _Tp>
         iterator insert_type(const_iterator position, const _Tp& value, size_type n = TYPE_BIT(_Tp)) {
-            _Size_fix_operation([ & ] { _bstr.insert_type<_Tp, std::false_type>(position->_Get_index(), value, n); });
+            _Size_fix_operation([&] { _bstr.insert_type<_Tp, std::false_type>(position->_Get_index(), value, n); });
             return iterator(_Bstr_accessor::make_reference(*this, position->_Get_index()), this);
         }
 
         _Self& erase(size_type index = 0, size_type n = npos) {
             _Base::check_npos(*this, index, n);
-            _Size_fix_operation([ & ] { _bstr.erase<std::false_type>(_beg + index, _size - index); });
+            _Size_fix_operation([&] { _bstr.erase<std::false_type>(_beg + index, _size - index); });
             return *this;
         }
         iterator erase(const_iterator position) { return erase(position, position + 1); }
         iterator erase(const_iterator first, const_iterator last) {
-            _Size_fix_operation([ & ] { _bstr.erase(_bstr.cbegin() + first->_Get_index(), _bstr.cbegin() + last->_Get_index()); });
+            _Size_fix_operation([&] { _bstr.erase(_bstr.cbegin() + first->_Get_index(), _bstr.cbegin() + last->_Get_index()); });
             return iterator(_Bstr_accessor::make_reference(*this, first->_Get_index()), this);
         }
 
@@ -1636,7 +1633,7 @@ namespace xstl {
             if (new_size > _size)
                 append(new_size - _size, value);
             else if (new_size < _size)
-                _Size_fix_operation([ & ] { _bstr.erase<std::false_type>(_beg + new_size, _size - new_size); });
+                _Size_fix_operation([&] { _bstr.erase<std::false_type>(_beg + new_size, _size - new_size); });
         }
         void clear() { erase(); }
         void push_back(bool value) { append(1, value); }
@@ -1644,11 +1641,11 @@ namespace xstl {
 #if !defined(_NO_BSTRING_SAFETY_VERIFY_) && !defined(_NO_XSTL_SAFATRY_VERIFY_)
             assert(("invalid to pop_back empty bitstring", _size != 0));
 #endif
-            _Size_fix_operation([ & ] { _bstr.erase<std::false_type>(_beg + _size, 1); });
+            _Size_fix_operation([&] { _bstr.erase<std::false_type>(_beg + _size, 1); });
         }
 
         void append(size_type n, bool value) {
-            _Size_fix_operation([ & ] { _bstr.insert<std::false_type>(_beg + _size, n, value); });
+            _Size_fix_operation([&] { _bstr.insert<std::false_type>(_beg + _size, n, value); });
         }
         template <class _Iter>
         void append(_Iter binary_first, _Iter binary_last) {
@@ -1660,16 +1657,16 @@ namespace xstl {
         }
         template <character_type _Elem>
         void append(const _Elem* str, size_type str_count, _Elem elem0 = static_cast<_Elem>('0'), _Elem elem1 = static_cast<_Elem>('1')) {
-            _Size_fix_operation([ & ] { _bstr.insert<_Elem, std::false_type>(_beg + _size, str, str_count, elem0, elem1); });
+            _Size_fix_operation([&] { _bstr.insert<_Elem, std::false_type>(_beg + _size, str, str_count, elem0, elem1); });
         }
         template <class _Other>
         void append(const bitstring_base<_Block, _Alloc, _Other>& bstr, typename bitstring_base<_Block, _Alloc, _Other>::size_type bstr_index = 0,
                     typename bitstring_base<_Block, _Alloc, _Other>::size_type bstr_count = _Base::npos) {
-            _Size_fix_operation([ & ] { _bstr.insert<_Other, std::false_type>(_beg + _size, bstr, bstr_index, bstr_count); });
+            _Size_fix_operation([&] { _bstr.insert<_Other, std::false_type>(_beg + _size, bstr, bstr_index, bstr_count); });
         }
         template <class _Tp>
         void append_type(const _Tp& value, size_type n) {
-            _Size_fix_operation([ & ] { _bstr.insert_type<_Tp, std::false_type>(_beg + _size, value, n); });
+            _Size_fix_operation([&] { _bstr.insert_type<_Tp, std::false_type>(_beg + _size, value, n); });
         }
 
         using _Base::assign;

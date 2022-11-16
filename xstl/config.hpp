@@ -134,6 +134,7 @@ namespace xstl {
         template <class _Scary_val>
         struct iter_base {
             using _Nodeptr = typename _Scary_val::_Nodeptr;
+            constexpr iter_base() = default;
             constexpr iter_base(_Nodeptr node, const container_val_base* cont) : _node(node), _pcont(cont) {}
 
             [[nodiscard]] constexpr _Nodeptr        base() const noexcept { return _node; }
@@ -291,7 +292,7 @@ namespace xstl {
             constexpr fwd_iter(_Nodeptr node, const container_val_base* cont) : _Base(node, cont) {}
 
             constexpr decltype(auto) operator*() const noexcept { return (reference) * static_cast<const _Base&>(*this); }
-            constexpr decltype(auto) operator->() const noexcept { return ( get_deref_t<pointer, _Scary_val> )static_cast<const _Base&>(*this).operator->(); }
+            constexpr decltype(auto) operator->() const noexcept { return (get_deref_t<pointer, _Scary_val>)static_cast<const _Base&>(*this).operator->(); }
 
             constexpr _Self& operator++() {
                 ++static_cast<_Base&>(*this);
@@ -468,7 +469,7 @@ namespace xstl {
             bid_iter(_Nodeptr node, const container_val_base* cont) : _Base(node, cont) {}
 
             constexpr decltype(auto) operator*() const noexcept { return (reference) * static_cast<const _Base&>(*this); }
-            constexpr decltype(auto) operator->() const noexcept { return ( get_deref_t<pointer, _Scary_val> )static_cast<const _Base&>(*this).operator->(); }
+            constexpr decltype(auto) operator->() const noexcept { return (get_deref_t<pointer, _Scary_val>)static_cast<const _Base&>(*this).operator->(); }
 
             constexpr _Self& operator++() {
                 ++static_cast<_Base&>(*this);
@@ -568,7 +569,7 @@ namespace xstl {
             constexpr unchecked_rand_iter(_Nodeptr node, const container_val_base* cont) : _Base(node, cont) {}
 
             constexpr decltype(auto) operator*() const noexcept { return (reference) * static_cast<const _Base&>(*this); }
-            constexpr decltype(auto) operator->() const noexcept { return ( get_deref_t<pointer, _Scary_val> )static_cast<const _Base&>(*this).operator->(); }
+            constexpr decltype(auto) operator->() const noexcept { return (get_deref_t<pointer, _Scary_val>)static_cast<const _Base&>(*this).operator->(); }
 
             constexpr _Self& operator++() {
                 ++static_cast<_Base&>(*this);
@@ -634,7 +635,7 @@ namespace xstl {
                 assert(("iterators haven't binded to any containers", this->_Get_cont()));
                 assert(("iterators cannot dereference", _Scary_val::dereferable(CAST2SCARY(CAST2SCARY(this->_Get_cont())), this->_node)));
 #endif
-                return ( get_deref_t<typename _Base::pointer, _Scary_val> )std::addressof(_Scary_val::extract(this->_node));
+                return (get_deref_t<typename _Base::pointer, _Scary_val>)std::addressof(_Scary_val::extract(this->_node));
             }
 
             [[nodiscard]] constexpr bool operator==(const _Self& rhs) const noexcept(noexcept(std::declval<_Nodeptr>() == std::declval<_Nodeptr>())) {
@@ -742,7 +743,7 @@ namespace xstl {
                 assert(("iterators haven't binded to any containers", this->_Get_cont()));
                 assert(("iterators cannot dereference", _Scary_val::dereferable(CAST2SCARY(this->_Get_cont()), this->_node)));
 #endif
-                return ( get_deref_t<pointer, _Scary_val> )static_cast<const _Base&>(*this).operator->();
+                return (get_deref_t<pointer, _Scary_val>)static_cast<const _Base&>(*this).operator->();
             }
 
             constexpr _Self& operator++() {
@@ -859,7 +860,7 @@ namespace xstl {
                 return *this;
             }
 
-            [[nodiscard]] constexpr reference operator[](const difference_type off) const { return _iter[ static_cast<difference_type>(-off - 1) ]; }
+            [[nodiscard]] constexpr reference operator[](const difference_type off) const { return _iter[static_cast<difference_type>(-off - 1)]; }
 
         private:
             _Iter _iter{};
