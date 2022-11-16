@@ -43,7 +43,7 @@ namespace xstl {
         };
 
         template <class _Alnode>
-        void _Destroy_node(_Alnode& alloc, _Huff_node* node) noexcept {
+        void destroy_node(_Alnode& alloc, _Huff_node* node) noexcept {
             static_assert(std::is_same_v<typename _Alnode::value_type, _Huff_node>, "Allocator's value_type is not consist with node");
             std::allocator_traits<_Alnode>::destroy(alloc, std::addressof(node->_value));
             std::allocator_traits<_Alnode>::deallocate(alloc, node, 1);
@@ -54,14 +54,14 @@ namespace xstl {
             if (node) {
                 _Destroy(alloc, node->_left);
                 _Destroy(alloc, node->_right);
-                _Destroy_node(alloc, node);
+                destroy_node(alloc, node);
             }
         }
 
         template <class _Alnode>
         inline _Huff_node* _Create_node(_Alnode& alloc, uint8_t value, int weight, _Huff_node* left = nullptr, _Huff_node* right = nullptr) {
             _Huff_node*     _node = alloc.allocate(1);
-            exception_guard _guard(_node, [](_Huff_node* node) { _Destroy_node(node); });
+            exception_guard _guard(_node, [](_Huff_node* node) { destroy_node(node); });
             std::allocator_traits<_Alnode>::construct(alloc, std::addressof(_node->_value), value);
             _node->_left   = left;
             _node->_right  = right;
