@@ -369,7 +369,7 @@ xstl/bin_reader.cpp
 
 [sd]list.h
 
-[sd]list.hpp
+xstl/[sd]list.hpp
 
 *.hint
 *.sln
