@@ -363,7 +363,13 @@ MigrationBackup/
 FodyWeavers.xsd
 
 test/
+xstl/bin_reader.cpp
 
 .claudiaideconfig
 
-xstl/[sd]list.hpp
+[sd]list.hpp
+
+*.hint
+*.sln
+*.vcxproj
+*.filters
