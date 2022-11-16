@@ -54,7 +54,7 @@ namespace xstl {
     public:
         union block_t {
             block_t* _next;
-            char     _data[ 1 ];
+            char     _data[1];
         };
 
         /**
@@ -170,9 +170,9 @@ namespace xstl {
         class list_t {
         public:
             list_t() { memset(_list, 0, sizeof(block_ptr) * LIST_SZ); }
-            block_ptr  operator[](size_t idx) { return _list[ idx ]; }
+            block_ptr  operator[](size_t idx) { return _list[idx]; }
             block_ptr* operator+(size_t off) { return _list + off; }
-            block_ptr  _list[ LIST_SZ ];
+            block_ptr  _list[LIST_SZ];
         };
 
         static char*  _pool_start;
@@ -207,17 +207,13 @@ namespace xstl {
             return par_alloc::allocate(n);
 #if defined(_USE_THREADS_)
         if (_Threads)
-            _mutex.lock();
+            std::lock_guard garud(_mutex);
 #endif
         typename _Base::block_ptr *_free_block_ptr = _free_list + _Fit_idx(n), _res = *_free_block_ptr;
-        if (_res == nullptr)                             // if there is no node in free list
-            _res = ( block_ptr )_Getchunk(round_up(n));  // get a chunk of memory
+        if (_res == nullptr)                           // if there is no node in free list
+            _res = (block_ptr)_Getchunk(round_up(n));  // get a chunk of memory
         else
             *_free_block_ptr = _res->_next;
-#if defined(_USE_THREADS_)
-        if (_Threads)
-            _mutex.unlock();
-#endif
         return _res;
     }
 
@@ -231,15 +227,11 @@ namespace xstl {
             return;
 #if defined(_USE_THREADS_)
         if (_Threads)
-            _mutex.lock();
+            std::lock_guard garud(_mutex);
 #endif
         typename _Base::block_ptr* _free_block_ptr = _free_list + _Fit_idx(n);
-        (( typename _Base::block_ptr )ptr)->_next  = *_free_block_ptr;
-        *_free_block_ptr                           = ( typename _Base::block_ptr )ptr;  // relink to free list
-#if defined(_USE_THREADS_)
-        if (_Threads)
-            _mutex.unlock();
-#endif
+        ((typename _Base::block_ptr)ptr)->_next    = *_free_block_ptr;
+        *_free_block_ptr                           = (typename _Base::block_ptr)ptr;  // relink to free list
     }
 
     template <int _Inst, bool _Threads>
@@ -283,13 +275,13 @@ namespace xstl {
                 _node           = *_free_block_ptr;
                 if (_node) {
                     *_free_block_ptr = _node->_next;
-                    _pool_start      = ( char* )_node;
+                    _pool_start      = (char*)_node;
                     _pool_end        = _pool_start + i;
                     return _Getchunk(_size);  // in order to maintain the other information
                 }
             }
             _pool_end   = nullptr;
-            _pool_start = ( char* )malloc_alloc<_Inst>::allocate(_total_sz);
+            _pool_start = (char*)malloc_alloc<_Inst>::allocate(_total_sz);
         }
         _pool_sz += _total_sz;
         _pool_end = _pool_start + _total_sz;
@@ -351,17 +343,13 @@ namespace xstl {
     void* unique_alloc<_Inst, _Threads>::allocate(size_t n) {
 #if defined(_USE_THREADS_)
         if (_Threads)
-            _mutex.lock();
+            std::lock_guard garud(_mutex);
 #endif
         block_ptr _res = _free_list_header;
         if (_res == nullptr)
-            _res = ( block_ptr )_Make_list(round_up(n));
+            _res = (block_ptr)_Make_list(round_up(n));
         else
             _free_list_header = _res->_next;
-#if defined(_USE_THREADS_)
-        if (_Threads)
-            _mutex.unlock();
-#endif
         return _res;
     }
 
@@ -371,14 +359,10 @@ namespace xstl {
             return;
 #if defined(_USE_THREADS_)
         if (_Threads)
-            _mutex.lock();
+            std::lock_guard garud(_mutex);
 #endif
-        (( block_ptr )ptr)->_next = _free_list_header;
-        _free_list_header         = ( block_ptr )ptr;
-#if defined(_USE_THREADS_)
-        if (_Threads)
-            _mutex.unlock();
-#endif
+        ((block_ptr)ptr)->_next = _free_list_header;
+        _free_list_header       = (block_ptr)ptr;
     }
 
     template <int _Inst, bool _Threads>
@@ -485,5 +469,43 @@ namespace xstl {
     inline bool operator!=(const alloc_wrapper<_Tp, _Alloc>& lhs, const alloc_wrapper<_Tp, _Alloc>& rhs) {
         return false;
     }
+
+    // propagate on container swap
+    template <class _Alloc>
+    void alloc_pocs(_Alloc& left, _Alloc& right) noexcept(std::allocator_traits<_Alloc>::propagate_on_container_swap::value) {
+        using std::swap;
+        if constexpr (std::allocator_traits<_Alloc>::propagate_on_container_swap::value)
+            swap(left, right);
+        else
+            assert(("containers incompatible for swap", left != right));
+    }
+
+    // propagate on container copy assignment
+    template <class _Alloc>
+    void alloc_pocca(_Alloc& left, const _Alloc& right) noexcept {
+        if constexpr (std::allocator_traits<_Alloc>::propagate_on_container_copy_assignment::value)
+            left = right;
+    }
+
+    // propagate on container move assignment
+    template <class _Alloc>
+    void alloc_pocma(_Alloc& left, _Alloc& right) noexcept {
+        if constexpr (std::allocator_traits<_Alloc>::propagate_on_container_move_assignment::value)
+            left = std::move(right);
+    }
+
+    template <class _Alloc>
+    inline constexpr bool alloc_pocca_v = std::allocator_traits<_Alloc>::propagate_on_container_copy_assignment::value && !std::allocator_traits<_Alloc>::is_always_equal::value;
+
+    enum class pocma_values {
+        IsEqual,      // usually allows contents to be stolen (e.g. with swap)
+        Propagate,    // usually allows the allocator to be propagated, and then contents stolen
+        NoPropagate,  // usually turns moves into copies
+    };
+
+    template <class _Alloc>
+    inline constexpr pocma_values alloc_pocma_v = std::allocator_traits<_Alloc>::is_always_equal::value
+                                                      ? pocma_values::IsEqual
+                                                      : (std::allocator_traits<_Alloc>::propagate_on_container_move_assignment::value ? pocma_values::Propagate : pocma_values::NoPropagate);
 }  // namespace xstl
 #endif

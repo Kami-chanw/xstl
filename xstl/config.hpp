@@ -22,7 +22,7 @@ namespace xstl {
         _Node* release() { return std::exchange(_node, nullptr); }
         ~exception_guard() {
             if (_node)
-                (*_releaser)(_node);
+                _releaser(_node);
         }
 
     private:
@@ -36,7 +36,7 @@ namespace xstl {
     template <class _Keycmp, class _Lhs, class _Rhs = _Lhs>
     inline constexpr bool is_nothrow_comparable_v = noexcept(static_cast<bool>(std::declval<const _Keycmp&>()(std::declval<const _Lhs&>(), std::declval<const _Rhs&>())));
 
-    struct container_val_base {  // for SCARY machinery
+    struct container_val_base {
     };
 
     namespace xstl_iterator {
@@ -49,8 +49,8 @@ namespace xstl {
             using const_pointer   = _Const_pointer;
             using reference       = _Reference;
             using const_reference = _Const_reference;
-
-            using _Nodeptr = _Nodeptr_type;
+            using _Node           = std::remove_pointer_t<_Nodeptr_type>;
+            using _Nodeptr        = _Nodeptr_type;
         };
 
         template <class _Ty, class = void>
@@ -133,7 +133,7 @@ namespace xstl {
 
         template <class _Scary_val>
         struct iter_base {
-            using _Nodeptr = typename _Scary_val::_Nodeptr;
+            using _Nodeptr        = typename _Scary_val::_Nodeptr;
             constexpr iter_base() = default;
             constexpr iter_base(_Nodeptr node, const container_val_base* cont) : _node(node), _pcont(cont) {}
 
@@ -877,28 +877,5 @@ namespace xstl {
         }
     }  // namespace xstl_iterator
 
-    // propagate on container swap
-    template <class _Alloc>
-    void alloc_pocs(_Alloc& left, _Alloc& right) noexcept(std::allocator_traits<_Alloc>::propagate_on_container_swap::value) {
-        using std::swap;
-        if constexpr (std::allocator_traits<_Alloc>::propagate_on_container_swap::value)
-            swap(left, right);
-        else
-            assert(("containers incompatible for swap", left != right));
-    }
-
-    // propagate on container copy assignment
-    template <class _Alloc>
-    void alloc_pocca(_Alloc& left, const _Alloc& right) noexcept {
-        if constexpr (std::allocator_traits<_Alloc>::propagate_on_container_copy_assignment::value)
-            left = right;
-    }
-
-    // propagate on container move assignment
-    template <class _Alloc>
-    void alloc_pocma(_Alloc& left, _Alloc& right) noexcept {
-        if constexpr (std::allocator_traits<_Alloc>::propagate_on_container_move_assignment::value)
-            left = std::move(right);
-    }
 }  // namespace xstl
 #endif

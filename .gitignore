@@ -367,9 +367,12 @@ xstl/bin_reader.cpp
 
 .claudiaideconfig
 
+[sd]list.h
+
 [sd]list.hpp
 
 *.hint
 *.sln
 *.vcxproj
 *.filters
+*.props
