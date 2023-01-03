@@ -542,7 +542,7 @@ namespace xstl {
         if (!(_state & READABLE))
             return EOF;
 #if !defined(_NO_BSTREAM_SAFETY_VERIFY_) && !defined(_NO_XSTL_SAFETRY_VERIFY_)
-        assert(("basic_bitbuf<Alloc>::sbumpb : reads too much bits", count <= BYTE_BIT));
+        assert(count <= BYTE_BIT && "basic_bitbuf<Alloc>::sbumpb : reads too much bits");
 #endif
         if (_countg == 0)
             return underflow();

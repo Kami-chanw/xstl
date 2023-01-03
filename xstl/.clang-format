@@ -33,7 +33,7 @@ BreakBeforeBinaryOperators:	NonAssignment
 BreakBeforeBraces:	Custom
 BreakBeforeTernaryOperators:	true
 BreakConstructorInitializersBeforeComma:	false
-ColumnLimit:	200
+ColumnLimit:	130
 CommentPragmas:	'^ IWYU pragma:'
 ConstructorInitializerAllOnOneLineOrOnePerLine:	false
 ConstructorInitializerIndentWidth:	4

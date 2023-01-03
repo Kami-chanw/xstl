@@ -71,81 +71,103 @@ namespace xstl {
      *	@brief get the detail info about a specific function
      */
     template <class _Fn, class... _Args>
-    struct funtion_traits {
+    struct function_traits {
         using rv_type                  = decltype(std::declval<_Fn>()(std::declval<_Args>()...));
-        static constexpr size_t args_n = funtion_traits<decltype(&_Fn::operator())>::args_n;
+        static constexpr size_t args_n = function_traits<decltype(&_Fn::operator())>::args_n;
     };
 
     template <class _RvTp, class... _Args>
-    struct funtion_traits<_RvTp(_Args...)> {
+    struct function_traits<_RvTp(_Args...)> {
         using rv_type                  = _RvTp;
         static constexpr size_t args_n = sizeof...(_Args);
     };
 
     template <class _RvTp, class... _Args>
-    struct funtion_traits<_RvTp (*)(_Args...)> {
+    struct function_traits<_RvTp (*)(_Args...)> {
         using rv_type                  = _RvTp;
         static constexpr size_t args_n = sizeof...(_Args);
     };
 
     template <class _RvTp, class... _Args>
-    struct funtion_traits<_RvTp (&)(_Args...)> {
+    struct function_traits<_RvTp (&)(_Args...)> {
         using rv_type                  = _RvTp;
         static constexpr size_t args_n = sizeof...(_Args);
     };
 
     template <class _Tp, class _RvTp, class... _Args>
-    struct funtion_traits<_RvTp (_Tp::*)(_Args...)> {
+    struct function_traits<_RvTp (_Tp::*)(_Args...)> {
         using rv_type                  = _RvTp;
         static constexpr size_t args_n = sizeof...(_Args);
     };
 
     template <class _Tp, class _RvTp, class... _Args>
-    struct funtion_traits<_RvTp (_Tp::*)(_Args...) const> {
-        using rv_type                  = _RvTp;
-        static constexpr size_t args_n = sizeof...(_Args);
-    };
-
-    template <class _RvTp, class... _Args>
-    struct funtion_traits<std::function<_RvTp(_Args...)>> {
-        using rv_type                  = _RvTp;
-        static constexpr size_t args_n = sizeof...(_Args);
-    };
-
-    template <class _RvTp, class... _Args>
-    struct funtion_traits<std::function<_RvTp (*)(_Args...)>> {
-        using rv_type                  = _RvTp;
-        static constexpr size_t args_n = sizeof...(_Args);
-    };
-
-    template <class _RvTp, class... _Args>
-    struct funtion_traits<std::function<_RvTp (&)(_Args...)>> {
+    struct function_traits<_RvTp (_Tp::*)(_Args...) noexcept> {
         using rv_type                  = _RvTp;
         static constexpr size_t args_n = sizeof...(_Args);
     };
 
     template <class _Tp, class _RvTp, class... _Args>
-    struct funtion_traits<std::function<_RvTp (_Tp::*)(_Args...)>> {
+    struct function_traits<_RvTp (_Tp::*)(_Args...) const> {
         using rv_type                  = _RvTp;
         static constexpr size_t args_n = sizeof...(_Args);
     };
 
     template <class _Tp, class _RvTp, class... _Args>
-    struct funtion_traits<std::function<_RvTp (_Tp::*)(_Args...) const>> {
+    struct function_traits<_RvTp (_Tp::*)(_Args...) const noexcept> {
+        using rv_type                  = _RvTp;
+        static constexpr size_t args_n = sizeof...(_Args);
+    };
+
+    template <class _RvTp, class... _Args>
+    struct function_traits<std::function<_RvTp(_Args...)>> {
+        using rv_type                  = _RvTp;
+        static constexpr size_t args_n = sizeof...(_Args);
+    };
+
+    template <class _RvTp, class... _Args>
+    struct function_traits<std::function<_RvTp (*)(_Args...)>> {
+        using rv_type                  = _RvTp;
+        static constexpr size_t args_n = sizeof...(_Args);
+    };
+
+    template <class _RvTp, class... _Args>
+    struct function_traits<std::function<_RvTp (&)(_Args...)>> {
+        using rv_type                  = _RvTp;
+        static constexpr size_t args_n = sizeof...(_Args);
+    };
+
+    template <class _Tp, class _RvTp, class... _Args>
+    struct function_traits<std::function<_RvTp (_Tp::*)(_Args...)>> {
+        using rv_type                  = _RvTp;
+        static constexpr size_t args_n = sizeof...(_Args);
+    };
+
+    template <class _Tp, class _RvTp, class... _Args>
+    struct function_traits<std::function<_RvTp (_Tp::*)(_Args...) noexcept>> {
+        using rv_type                  = _RvTp;
+        static constexpr size_t args_n = sizeof...(_Args);
+    };
+
+    template <class _Tp, class _RvTp, class... _Args>
+    struct function_traits<std::function<_RvTp (_Tp::*)(_Args...) const>> {
+        using rv_type                  = _RvTp;
+        static constexpr size_t args_n = sizeof...(_Args);
+    };
+
+    template <class _Tp, class _RvTp, class... _Args>
+    struct function_traits<std::function<_RvTp (_Tp::*)(_Args...) const noexcept>> {
         using rv_type                  = _RvTp;
         static constexpr size_t args_n = sizeof...(_Args);
     };
 
     template <class _Fn, class... _Args>
-    using ret_value_of_t = typename funtion_traits<_Fn, _Args...>::rv_type;
+    using ret_value_of_t = typename function_traits<_Fn, _Args...>::rv_type;
 
     template <class _Fn>
-    static constexpr size_t args_n_v = funtion_traits<_Fn>::args_n;
+    static constexpr size_t args_n_v = function_traits<_Fn>::args_n;
 
     template <class _Tp>
-    concept function_type = requires {
-        typename funtion_traits<_Tp>::rv_type;
-    };
+    concept function_type = requires { typename function_traits<_Tp>::rv_type; };
 
     template <function_type _Fn>
     size_t get_args_count(_Fn) {
