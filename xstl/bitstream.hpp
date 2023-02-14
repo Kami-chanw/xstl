@@ -46,16 +46,16 @@ namespace xstl {
 
         virtual void unsetf(bfmtflags flags) { _fmtfl &= ~flags; }  // allow derived class do external operations when flag changed
 
-        [[nodiscard]] bool     good() const { return rdstate() == goodbit; }
-        [[nodiscard]] bool     eof() const { return rdstate() & eofbit; }
-        [[nodiscard]] bool     fail() const { return rdstate() & (badbit | failbit); }
-        [[nodiscard]] bool     bad() const { return rdstate() & badbit; }
-        [[nodiscard]] biostate rdstate() const { return _state; }
+        XSTL_NODISCARD bool     good() const { return rdstate() == goodbit; }
+        XSTL_NODISCARD bool     eof() const { return rdstate() & eofbit; }
+        XSTL_NODISCARD bool     fail() const { return rdstate() & (badbit | failbit); }
+        XSTL_NODISCARD bool     bad() const { return rdstate() & badbit; }
+        XSTL_NODISCARD biostate rdstate() const { return _state; }
 
         void setstate(biostate state) { clear(rdstate() | state); }
         void clear(biostate state = goodbit);
 
-        [[nodiscard]] biostate exceptions() const { return _exception; }
+        XSTL_NODISCARD biostate exceptions() const { return _exception; }
         void                   exceptions(biostate except) {
             _exception = except;
             clear(rdstate());
@@ -336,7 +336,7 @@ namespace xstl {
          *	@brief replaces or obtains a copy of the associated with the internal basic_bitstring
          *   @return a basic_bitstring object holding the replacement character sequence
          */
-        /* [[nodiscard]] _Bstr str() const& {
+        /* XSTL_NODISCARD _Bstr str() const& {
             _Bstr _bstr(_alloc);
             auto& _vec = _Bstr_accessor::get_vec(_bstr);
             return _bstr;
@@ -814,7 +814,7 @@ namespace xstl {
         }
 
         explicit           operator bool() const { return !fail(); }
-        [[nodiscard]] bool operator!() const { return fail(); }
+        XSTL_NODISCARD bool operator!() const { return fail(); }
 
         void        swap(basic_bios& other) noexcept;
         basic_bios& operator=(const basic_bios&) = delete;
@@ -1933,14 +1933,14 @@ namespace xstl {
         constexpr ibitstream_iterator() {}
         ibitstream_iterator(istream_type& ibs) : _pibs(std::addressof(ibs)) { _Getval(); }
 
-        [[nodiscard]] const _Tp& operator*() const {
+        XSTL_NODISCARD const _Tp& operator*() const {
 #if !defined(_NO_ITERATOR_SAFETY_VERIFY_) && !defined(_NO_XSTL_SAFETY_VERIFY_)
             assert(("ibitstreambuf_iterator is not dereferenceable", _pibs));
 #endif
             return _value;
         }
 
-        [[nodiscard]] const _Tp* operator->() const { return std::addressof(operator*()); }
+        XSTL_NODISCARD const _Tp* operator->() const { return std::addressof(operator*()); }
 
         ibitstream_iterator& operator++() {
             _Getval();
@@ -1972,12 +1972,12 @@ namespace xstl {
     };
 
     template <class _Tp, class _Alloc>
-    [[nodiscard]] bool operator==(const ibitstream_iterator<_Tp, _Alloc>& lhs, const ibitstream_iterator<_Tp, _Alloc>& rhs) {
+    XSTL_NODISCARD bool operator==(const ibitstream_iterator<_Tp, _Alloc>& lhs, const ibitstream_iterator<_Tp, _Alloc>& rhs) {
         return lhs._Equal(rhs);
     }
 
     template <class _Tp, class _Alloc>
-    [[nodiscard]] bool operator!=(const ibitstream_iterator<_Tp, _Alloc>& lhs, const ibitstream_iterator<_Tp, _Alloc>& rhs) {
+    XSTL_NODISCARD bool operator!=(const ibitstream_iterator<_Tp, _Alloc>& lhs, const ibitstream_iterator<_Tp, _Alloc>& rhs) {
         return !(lhs == rhs);
     }
 
@@ -2006,7 +2006,7 @@ namespace xstl {
             return *this;
         }
 
-        [[nodiscard]] obitstream_iterator& operator*() { return *this; }
+        XSTL_NODISCARD obitstream_iterator& operator*() { return *this; }
 
         obitstream_iterator& operator++() { return *this; }
 

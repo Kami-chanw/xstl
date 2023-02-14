@@ -2,7 +2,7 @@
 #ifndef _COMPRESSED_TUPLE_
 #define _COMPRESSED_TUPLE_
 
-#include "config.hpp"
+#include "utility.hpp"
 #include <tuple>
 
 namespace xstl {
@@ -162,7 +162,7 @@ namespace xstl {
             }
 #ifdef __cpp_lib_three_way_comparison
             template <class _UFirst, class... _URest>
-            [[nodiscard]] constexpr std::common_comparison_category_t<xstl::synth_three_way_result<_This, _UFirst>>
+            XSTL_NODISCARD constexpr std::common_comparison_category_t<xstl::synth_three_way_result<_This, _UFirst>>
             _Three_way_compare(const _Compressed_tuple<_Idx, _UFirst, _URest...>& other) const {
                 if (auto _res = xstl::synth_three_way{}(_Get_first(), other._Get_first()); _res != 0)
                     return _res;
@@ -170,7 +170,7 @@ namespace xstl {
             }
 #else
             template <class... _Other>
-            [[nodiscard]] constexpr bool _Less(const _Compressed_tuple<_Idx, _Other...>& rhs) const {
+            XSTL_NODISCARD constexpr bool _Less(const _Compressed_tuple<_Idx, _Other...>& rhs) const {
                 return _Get_first() < rhs._Get_first()
                        || (!(rhs._Get_first() < _Get_first()) && _Rest_tuple::_Less(rhs._Get_rest()));
             }
@@ -251,7 +251,7 @@ namespace xstl {
             }
 #ifdef __cpp_lib_three_way_comparison
             template <class _UFirst>
-            [[nodiscard]] constexpr xstl::synth_three_way_result<_This, _UFirst>
+            XSTL_NODISCARD constexpr xstl::synth_three_way_result<_This, _UFirst>
             _Three_way_compare(const _Compressed_tuple<_Idx, _UFirst>& other) const {
                 if (auto _res = xstl::synth_three_way{}(_Get_first(), other._Get_first()); _res != 0)
                     return _res;
@@ -259,7 +259,7 @@ namespace xstl {
             }
 #else
             template <class _UFirst>
-            [[nodiscard]] constexpr bool _Less(const _Compressed_tuple<_Idx, _UFirst>& other) const {
+            XSTL_NODISCARD constexpr bool _Less(const _Compressed_tuple<_Idx, _UFirst>& other) const {
                 return _Get_first() < other._Get_first();
             }
 #endif
@@ -342,7 +342,7 @@ namespace xstl {
     public:
 #if defined(__cpp_conditional_explicit) || defined(_MSC_VER)  // due to MSVC bug
         template <class _Dummy = void, std::enable_if_t<_Default_constructible_v<std::is_void_v<_Dummy>>, int> = 0>
-        constexpr explicit(_Explicit_default_ctor<std::is_void_v<_Dummy>>) //_Dummy is used for SFINAE
+        constexpr explicit(_Explicit_default_ctor<std::is_void_v<_Dummy>>)  //_Dummy is used for SFINAE
             compressed_tuple() noexcept(std::conjunction_v<std::is_nothrow_default_constructible<_Args>...>)
             : _Base() {}
 
@@ -723,51 +723,51 @@ namespace xstl {
 
         constexpr bool _Equals(const compressed_tuple&) const noexcept { return true; }
 #ifdef __cpp_lib_three_way_comparison
-        [[nodiscard]] constexpr std::strong_ordering _Three_way_compare(const compressed_tuple&) const noexcept {
+        XSTL_NODISCARD constexpr std::strong_ordering _Three_way_compare(const compressed_tuple&) const noexcept {
             return std::strong_ordering::equal;
         }
 #else
-        [[nodiscard]] constexpr bool _Less(const compressed_tuple&) const noexcept { return false; }
+        XSTL_NODISCARD constexpr bool _Less(const compressed_tuple&) const noexcept { return false; }
 #endif
     };
 
     template <class... _Args1, class... _Args2>
-    [[nodiscard]] constexpr bool operator==(const compressed_tuple<_Args1...>& lhs, const compressed_tuple<_Args2...>& rhs) {
+    XSTL_NODISCARD constexpr bool operator==(const compressed_tuple<_Args1...>& lhs, const compressed_tuple<_Args2...>& rhs) {
         static_assert(sizeof...(_Args1) == sizeof...(_Args2), "cannot compare compressed_tuples of different sizes");
         return lhs._Equals(rhs);
     }
 
 #ifdef __cpp_lib_three_way_comparison
     template <class... _Args1, class... _Args2>
-    [[nodiscard]] constexpr std::common_comparison_category_t<synth_three_way_result<_Args1, _Args2>...>
+    XSTL_NODISCARD constexpr std::common_comparison_category_t<synth_three_way_result<_Args1, _Args2>...>
     operator<=>(const compressed_tuple<_Args1...>& lhs, const compressed_tuple<_Args2...>& rhs) {
         static_assert(sizeof...(_Args1) == sizeof...(_Args2), "cannot compare compressed_tuples of different sizes");
         return lhs._Three_way_compare(rhs);
     }
 #else
     template <class... _Args1, class... _Args2>
-    [[nodiscard]] constexpr bool operator!=(const compressed_tuple<_Args1...>& lhs, const compressed_tuple<_Args2...>& rhs) {
+    XSTL_NODISCARD constexpr bool operator!=(const compressed_tuple<_Args1...>& lhs, const compressed_tuple<_Args2...>& rhs) {
         return !(lhs == rhs);
     }
 
     template <class... _Args1, class... _Args2>
-    [[nodiscard]] constexpr bool operator<(const compressed_tuple<_Args1...>& lhs, const compressed_tuple<_Args2...>& rhs) {
+    XSTL_NODISCARD constexpr bool operator<(const compressed_tuple<_Args1...>& lhs, const compressed_tuple<_Args2...>& rhs) {
         static_assert(sizeof...(_Args1) == sizeof...(_Args2), "cannot compare tuples of different sizes");
         return lhs._Less(rhs);
     }
 
     template <class... _Args1, class... _Args2>
-    [[nodiscard]] constexpr bool operator>=(const compressed_tuple<_Args1...>& lhs, const compressed_tuple<_Args2...>& rhs) {
+    XSTL_NODISCARD constexpr bool operator>=(const compressed_tuple<_Args1...>& lhs, const compressed_tuple<_Args2...>& rhs) {
         return !(lhs < rhs);
     }
 
     template <class... _Args1, class... _Args2>
-    [[nodiscard]] constexpr bool operator>(const compressed_tuple<_Args1...>& lhs, const compressed_tuple<_Args2...>& rhs) {
+    XSTL_NODISCARD constexpr bool operator>(const compressed_tuple<_Args1...>& lhs, const compressed_tuple<_Args2...>& rhs) {
         return rhs < lhs;
     }
 
     template <class... _Args1, class... _Args2>
-    [[nodiscard]] constexpr bool operator<=(const compressed_tuple<_Args1...>& lhs, const compressed_tuple<_Args2...>& rhs) {
+    XSTL_NODISCARD constexpr bool operator<=(const compressed_tuple<_Args1...>& lhs, const compressed_tuple<_Args2...>& rhs) {
         return !(rhs < lhs);
     }
 #endif
@@ -784,17 +784,17 @@ namespace xstl {
     compressed_tuple(std::allocator_arg_t, _Alloc, compressed_tuple<_Args...>) -> compressed_tuple<_Args...>;
 
     template <class... _Args>
-    [[nodiscard]] constexpr auto make_ctuple(_Args&&... args) {
+    XSTL_NODISCARD constexpr auto make_ctuple(_Args&&... args) {
         return compressed_tuple<_Unrefwrap<std::decay_t<_Args>>::type...>(std::forward<_Args>(args)...);
     }
 
     template <class... _Args>
-    [[nodiscard]] constexpr auto forward_as_ctuple(_Args&&... args) noexcept {
+    XSTL_NODISCARD constexpr auto forward_as_ctuple(_Args&&... args) noexcept {
         return compressed_tuple<_Args&&...>(std::forward<_Args>(args)...);
     }
 
     template <class... _Args>
-    [[nodiscard]] constexpr auto ctie(_Args&... args) noexcept {
+    XSTL_NODISCARD constexpr auto ctie(_Args&... args) noexcept {
         return compressed_tuple<_Args&...>(args...);
     }
 
@@ -839,9 +839,7 @@ namespace std {
 
     template <size_t _Idx>
     struct tuple_element<_Idx, xstl::compressed_tuple<>> {
-        template <size_t>
-        constexpr static bool _False = false;  // false value attached to a dependent name (for static_assert)
-        static_assert(_False<_Idx>, "compressed_tuple index out of bounds");
+        static_assert(xstl::always_false<decltype(_Idx)>, "compressed_tuple index out of bounds");
     };
 
     template <class _This, class... _Rest>
@@ -876,25 +874,25 @@ namespace std {
     }
 
     template <class _Ty, class... _Types>
-    [[nodiscard]] constexpr _Ty& get(xstl::compressed_tuple<_Types...>& tuple) noexcept {
+    XSTL_NODISCARD constexpr _Ty& get(xstl::compressed_tuple<_Types...>& tuple) noexcept {
         using type = typename xstl::_Tuple_element<_Ty, xstl::compressed_tuple<_Types...>>::type;
         return static_cast<type&>(tuple)._Get_first();
     }
 
     template <class _Ty, class... _Types>
-    [[nodiscard]] constexpr const _Ty& get(const xstl::compressed_tuple<_Types...>& tuple) noexcept {
+    XSTL_NODISCARD constexpr const _Ty& get(const xstl::compressed_tuple<_Types...>& tuple) noexcept {
         using type = typename xstl::_Tuple_element<_Ty, xstl::compressed_tuple<_Types...>>::type;
         return static_cast<const type&>(tuple)._Get_first();
     }
 
     template <class _Ty, class... _Types>
-    [[nodiscard]] constexpr _Ty&& get(xstl::compressed_tuple<_Types...>&& tuple) noexcept {
+    XSTL_NODISCARD constexpr _Ty&& get(xstl::compressed_tuple<_Types...>&& tuple) noexcept {
         using type = typename xstl::_Tuple_element<_Ty, xstl::compressed_tuple<_Types...>>::type;
         return static_cast<_Ty&&>(static_cast<type&>(tuple)._Get_first());
     }
 
     template <class _Ty, class... _Types>
-    [[nodiscard]] constexpr const _Ty&& get(const xstl::compressed_tuple<_Types...>&& tuple) noexcept {
+    XSTL_NODISCARD constexpr const _Ty&& get(const xstl::compressed_tuple<_Types...>&& tuple) noexcept {
         using type = typename xstl::_Tuple_element<_Ty, xstl::compressed_tuple<_Types...>>::type;
         return static_cast<const _Ty&&>(static_cast<const type&>(tuple)._Get_first());
     }
@@ -969,7 +967,7 @@ namespace xstl {  // implementation of ctuple_cat, which needs to use overload o
         };
     }  // namespace
     template <class... _Tuples>
-    [[nodiscard]] constexpr auto ctuple_cat(_Tuples&&... _RestTpls) {
+    XSTL_NODISCARD constexpr auto ctuple_cat(_Tuples&&... _RestTpls) {
         return _Tuple_concater<typename _Tuple_cat_result<_Tuples...>::type, _Indices_t<_Tuples...>, _Tuples...>::_Concat(
             std::forward<_Tuples>(_RestTpls)...);
     }

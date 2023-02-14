@@ -13,325 +13,321 @@
 #ifndef _BS_TREE_HPP_
 #define _BS_TREE_HPP_
 
+#include "allocator.hpp"
 #include "compressed_tuple.hpp"
-#include "config.hpp"
-#include "xstl_iter.hpp"
+#include "iter_adapter.hpp"
 #include <algorithm>
-#include <atomic>
+#ifndef __cpp_explicit_this_parameter
 #include <functional>
+#endif
 #include <iosfwd>
+#include <queue>
 #include <random>
-#include <vector>
 
 #undef KFN
 #define KFN(NODE) _Traits::kfn((NODE)->_value)
 
 namespace xstl {
-    namespace {
-        /**
-         *	@enum color
-         *	@brief for red black tree(rb_tree)
-         */
-        enum { BLACK, RED };
+    // namespace {
+    /**
+     *	@enum color
+     *	@brief for red black tree(rb_tree)
+     */
+    enum { BLACK, RED };
 
-        /**
-         *	@class _Tree_node
-         *   @brief the node of bs_tree.
-         */
-        template <class _Tp>
-        struct _Tree_node {
-            using _Node    = _Tree_node<_Tp>;
-            using _Nodeptr = _Node*;
+    /**
+     *	@class _Tree_node
+     *   @brief the node of bs_tree.
+     */
+    template <class _Tp>
+    struct _Tree_node {
+        using _Node    = _Tree_node<_Tp>;
+        using _Nodeptr = _Node*;
 
-            int _prop = 0;
+        int _prop = 0;
 
-            bool     _is_nil = true;
-            _Nodeptr _left{ nullptr };
-            _Nodeptr _right{ nullptr };
-            _Nodeptr _parent{ nullptr };
-            _Tp      _value{};
-
-            template <class _Alnode>
-            inline static _Nodeptr create_root(_Alnode& alloc) {
-                static_assert(std::is_same_v<typename _Alnode::value_type, _Node>,
-                              "Allocator's value_type is not consist with node");
-                _Nodeptr _node = alloc.allocate(1);
-                init_node(_node, _node, _node, _node, BLACK, true);
-                return _node;
-            }
-
-            template <class _Alnode, class... _Args>
-            inline static _Nodeptr create_node(_Alnode& alloc, _Nodeptr root, _Args&&... args) {
-                static_assert(std::is_same_v<typename _Alnode::value_type, _Node>,
-                              "Allocator's value_type is not consist with node");
-                _Nodeptr _node = alloc.allocate(1);
-                std::allocator_traits<_Alnode>::construct(alloc, std::addressof(_node->_value), std::forward<_Args>(args)...);
-                init_node(_node, root, root, root, BLACK, false);
-                return _node;
-            }
-
-            inline bool is_real_root() const noexcept { return this == _parent->_parent; }
-            inline bool is_left() const noexcept { return this == _parent->_left; }
-            inline bool is_right() const noexcept { return this == _parent->_right; }
-
-            inline static void assign_node(_Nodeptr node, _Nodeptr left, _Nodeptr right, _Nodeptr parent, const int attr,
-                                           bool is_nil) {
-                node->_left   = left;
-                node->_right  = right;
-                node->_parent = parent;
-                node->_prop   = attr;
-                node->_is_nil = is_nil;
-            }
-
-            inline static void init_node(_Nodeptr node, _Nodeptr left, _Nodeptr right, _Nodeptr parent, const int attr,
-                                         bool is_nil) {
-                std::construct_at(std::addressof(node->_left), left);
-                std::construct_at(std::addressof(node->_right), right);
-                std::construct_at(std::addressof(node->_parent), parent);
-                node->_prop   = attr;
-                node->_is_nil = is_nil;
-            }
-
-            template <class _Alnode>
-            void static destroy_node(_Alnode& alloc, _Nodeptr node) noexcept {
-                static_assert(std::is_same_v<typename _Alnode::value_type, _Node>,
-                              "Allocator's value_type is not consist with node");
-                std::allocator_traits<_Alnode>::destroy(alloc, std::addressof(node->_value));
-                std::allocator_traits<_Alnode>::deallocate(alloc, node, 1);
-            }
-
-            inline static _Nodeptr leftmost(_Nodeptr node) noexcept {
-                while (!node->_left->_is_nil)
-                    node = node->_left;
-                return node;
-            }
-
-            inline static _Nodeptr rightmost(_Nodeptr node) noexcept {
-                while (!node->_right->_is_nil)
-                    node = node->_right;
-                return node;
-            }
-
-            inline static _Nodeptr find_inorder_predecessor(_Nodeptr node) noexcept {
-                if (!node->_left->_is_nil)
-                    return rightmost(node->_left);
-                _Nodeptr _parent{};
-                while (!(_parent = node->_parent)->_is_nil && node->is_left())
-                    node = _parent;
-                if (!node->_is_nil)
-                    node = _parent;
-                return node;
-            }
-
-            inline static _Nodeptr find_inorder_successor(_Nodeptr node) noexcept {
-                if (!node->_right->_is_nil)
-                    return leftmost(node->_right);
-                while (!node->_parent->_is_nil && node->is_right())
-                    node = node->_parent;
-                return node->_parent;
-            }
-        };
+        bool     _is_nil = true;
+        _Nodeptr _left{ nullptr };
+        _Nodeptr _right{ nullptr };
+        _Nodeptr _parent{ nullptr };
+        _Tp      _value{};
 
         template <class _Alnode>
-        struct _Tree_temp_node {  // for exception safety
-            using _Alnode_traits = std::allocator_traits<_Alnode>;
-            using _Nodeptr       = typename _Alnode_traits::pointer;
-            using _Node          = typename std::remove_pointer_t<_Nodeptr>;
+        inline static _Nodeptr create_root(_Alnode& alloc) {
+            static_assert(std::is_same_v<typename _Alnode::value_type, _Node>, "Allocator's value_type is not consist with node");
+            _Nodeptr _node = alloc.allocate(1);
+            init_node(_node, _node, _node, _node, BLACK, true);
+            return _node;
+        }
 
-            explicit _Tree_temp_node(_Alnode& alloc) : _alnode(alloc), _node(alloc.allocate(1)) {
-                _Node::init_node(_node, _node, _node, _node, BLACK, true);
-            }
+        template <class _Alnode, class... _Args>
+        inline static _Nodeptr create_node(_Alnode& alloc, _Nodeptr root, _Args&&... args) {
+            static_assert(std::is_same_v<typename _Alnode::value_type, _Node>, "Allocator's value_type is not consist with node");
+            _Nodeptr _node = alloc.allocate(1);
+            std::allocator_traits<_Alnode>::construct(alloc, std::addressof(_node->_value), std::forward<_Args>(args)...);
+            init_node(_node, root, root, root, BLACK, false);
+            return _node;
+        }
 
-            template <class... _Args>
-            _Tree_temp_node(_Alnode& alloc, _Nodeptr root, _Args&&... values) : _Tree_temp_node(alloc) {
-                _Alnode_traits::construct(_alnode, std::addressof(_node->_value), std::forward<_Args>(values)...);
-                _Node::init_node(_node, root, root, root, RED, false);
-            }
+        inline bool is_real_root() const noexcept { return this == _parent->_parent; }
+        inline bool is_left() const noexcept { return this == _parent->_left; }
+        inline bool is_right() const noexcept { return this == _parent->_right; }
 
-            _Tree_temp_node(const _Tree_temp_node&)            = delete;
-            _Tree_temp_node& operator=(const _Tree_temp_node&) = delete;
+        inline static void assign_node(_Nodeptr node, _Nodeptr left, _Nodeptr right, _Nodeptr parent, const int attr,
+                                       bool is_nil) {
+            node->_left   = left;
+            node->_right  = right;
+            node->_parent = parent;
+            node->_prop   = attr;
+            node->_is_nil = is_nil;
+        }
 
-            [[nodiscard]] _Nodeptr release() noexcept { return std::exchange(_node, nullptr); }
+        inline static void init_node(_Nodeptr node, _Nodeptr left, _Nodeptr right, _Nodeptr parent, const int attr, bool is_nil) {
+            construct_in_place(node->_left, left);
+            construct_in_place(node->_right, right);
+            construct_in_place(node->_parent, parent);
+            node->_prop   = attr;
+            node->_is_nil = is_nil;
+        }
 
-            ~_Tree_temp_node() {
-                if (_node)
-                    _Node::destroy_node(_alnode, _node);
-            }
+        template <class _Alnode>
+        void static destroy_node(_Alnode& alloc, _Nodeptr node) noexcept {
+            static_assert(std::is_same_v<typename _Alnode::value_type, _Node>, "Allocator's value_type is not consist with node");
+            std::allocator_traits<_Alnode>::destroy(alloc, std::addressof(node->_value));
+            std::allocator_traits<_Alnode>::deallocate(alloc, node, 1);
+        }
 
-            _Nodeptr _node = nullptr;
-            _Alnode& _alnode;
-        };
+        inline static _Nodeptr leftmost(_Nodeptr node) noexcept {
+            while (!node->_left->_is_nil)
+                node = node->_left;
+            return node;
+        }
 
-        /**
-         *	@class _Scary_tree
-         *   @brief for scary iterator
-         */
-        template <class _Val_types>
-        struct _Scary_tree : public container_val_base {
-            using _Self           = _Scary_tree<_Val_types>;
-            using _Nodeptr        = typename _Val_types::_Nodeptr;
-            using _Node           = typename _Val_types::_Node;
-            using value_type      = typename _Val_types::value_type;
-            using size_type       = typename _Val_types::size_type;
-            using difference_type = typename _Val_types::difference_type;
-            using pointer         = typename _Val_types::pointer;
-            using const_pointer   = typename _Val_types::const_pointer;
-            using reference       = value_type&;
-            using const_reference = const value_type&;
+        inline static _Nodeptr rightmost(_Nodeptr node) noexcept {
+            while (!node->_right->_is_nil)
+                node = node->_right;
+            return node;
+        }
 
-#ifdef _PREORDER_ITERATOR_
-            static void incr(_Nodeptr& node) noexcept {
-                if (!node->_left->_is_nil)
-                    node = node->_left;
-                else if (!node->_right->_is_nil)
-                    node = node->_right;
-                else {
-                    _Nodeptr _suc = node->_parent;
-                    while (node != _suc->_parent) {
-                        if (node == _suc->_left && !_suc->_right->_is_nil) {
-                            node = _suc->_right;
-                            return;
-                        }
-                        node = std::exchange(_suc, _suc->_parent);
+        inline static _Nodeptr find_inorder_predecessor(_Nodeptr node) noexcept {
+            if (!node->_left->_is_nil)
+                return rightmost(node->_left);
+            _Nodeptr _parent{};
+            while (!(_parent = node->_parent)->_is_nil && node->is_left())
+                node = _parent;
+            if (!node->_is_nil)
+                node = _parent;
+            return node;
+        }
+
+        inline static _Nodeptr find_inorder_successor(_Nodeptr node) noexcept {
+            if (!node->_right->_is_nil)
+                return leftmost(node->_right);
+            while (!node->_parent->_is_nil && node->is_right())
+                node = node->_parent;
+            return node->_parent;
+        }
+    };
+
+    template <class _Alnode>
+    struct _Tree_temp_node {  // for exception safety
+        using _Alnode_traits = std::allocator_traits<_Alnode>;
+        using _Nodeptr       = typename _Alnode_traits::pointer;
+        using _Node          = typename std::remove_pointer_t<_Nodeptr>;
+
+        explicit _Tree_temp_node(_Alnode& alloc) : _alnode(alloc), _node(alloc.allocate(1)) {
+            _Node::init_node(_node, _node, _node, _node, BLACK, true);
+        }
+
+        template <class... _Args>
+        _Tree_temp_node(_Alnode& alloc, _Nodeptr root, _Args&&... values) : _Tree_temp_node(alloc) {
+            _Alnode_traits::construct(_alnode, std::addressof(_node->_value), std::forward<_Args>(values)...);
+            _Node::init_node(_node, root, root, root, RED, false);
+        }
+
+        _Tree_temp_node(const _Tree_temp_node&)            = delete;
+        _Tree_temp_node& operator=(const _Tree_temp_node&) = delete;
+
+        XSTL_NODISCARD _Nodeptr release() noexcept { return std::exchange(_node, nullptr); }
+
+        ~_Tree_temp_node() {
+            if (_node)
+                _Node::destroy_node(_alnode, _node);
+        }
+
+        _Nodeptr _node = nullptr;
+        _Alnode& _alnode;
+    };
+
+    /**
+     *	@class _Tree_val
+     *   @brief for scary iterator
+     */
+    template <class _Val_types>
+    struct _Tree_val : public container_val_base {
+        using _Self           = _Tree_val<_Val_types>;
+        using _Nodeptr        = typename _Val_types::_Nodeptr;
+        using _Node           = typename _Val_types::_Node;
+        using value_type      = typename _Val_types::value_type;
+        using size_type       = typename _Val_types::size_type;
+        using difference_type = typename _Val_types::difference_type;
+        using pointer         = typename _Val_types::pointer;
+        using const_pointer   = typename _Val_types::const_pointer;
+        using reference       = value_type&;
+        using const_reference = const value_type&;
+
+#ifdef PREORDER_ITERATOR
+        static void incr(_Nodeptr& node) noexcept {
+            if (!node->_left->_is_nil)
+                node = node->_left;
+            else if (!node->_right->_is_nil)
+                node = node->_right;
+            else {
+                _Nodeptr _suc = node->_parent;
+                while (node != _suc->_parent) {
+                    if (node == _suc->_left && !_suc->_right->_is_nil) {
+                        node = _suc->_right;
+                        return;
                     }
-                    node = _suc;
+                    node = std::exchange(_suc, _suc->_parent);
+                }
+                node = _suc;
+            }
+        }
+
+        static void _Decr(_Nodeptr& node) noexcept {
+            if (node->_is_nil) {
+                node = node->_right;
+                while (!node->_left->_is_nil || !node->_right->_is_nil) {
+                    node = _Node::rightmost(node);
+                    if (!node->_left->_is_nil)
+                        node = node->_left;
                 }
             }
-
-            static void _Decr(_Nodeptr& node) noexcept {
-                if (node->_is_nil) {
-                    node = node->_right;
-                    while (!node->_left->_is_nil || !node->_right->_is_nil) {
-                        node = _Node::rightmost(node);
-                        if (!node->_left->_is_nil)
-                            node = node->_left;
+            else {
+                _Nodeptr _pre = node->_parent;
+                if (node->is_right() && !_pre->_left->_is_nil && !node->is_real_root()) {
+                    _pre = _pre->_left;
+                    while (!_pre->_right->_is_nil || !_pre->_left->_is_nil) {
+                        _pre = _Node::rightmost(_pre);
+                        if (!_pre->_left->_is_nil)
+                            _pre = _pre->_left;
                     }
                 }
-                else {
-                    _Nodeptr _pre = node->_parent;
-                    if (node->is_right() && !_pre->_left->_is_nil && !node->is_real_root()) {
-                        _pre = _pre->_left;
-                        while (!_pre->_right->_is_nil || !_pre->_left->_is_nil) {
-                            _pre = _Node::rightmost(_pre);
-                            if (!_pre->_left->_is_nil)
-                                _pre = _pre->_left;
-                        }
+                node = _pre;
+            }
+        }
+#elif defined POSTORDER_ITERATOR
+        static void incr(_Nodeptr& node) noexcept {
+            _Nodeptr _suc = node->_parent;
+            if (node->is_left() && !_suc->_right->_is_nil && !node->is_real_root()) {
+                _suc = _suc->_right;
+                while (!_suc->_left->_is_nil || !_suc->_right->_is_nil) {
+                    _suc = _Node::leftmost(_suc);
+                    if (!_suc->_right->_is_nil)
+                        _suc = _suc->_right;
+                }
+            }
+            node = _suc;
+        }
+
+        static void _Decr(_Nodeptr& node) noexcept {
+            if (node->_is_nil)
+                node = node->_parent;
+            else if (!node->_right->_is_nil)
+                node = node->_right;
+            else if (!node->_left->_is_nil)
+                node = node->_left;
+            else {
+                for (_Nodeptr _pre = node->_parent;; _pre = _pre->_parent) {
+                    if (node == _pre->_right && !_pre->_left->_is_nil) {
+                        node = _pre->_left;
+                        return;
                     }
                     node = _pre;
                 }
             }
-#elif defined _POSTORDER_ITERATOR_
-            static void incr(_Nodeptr& node) noexcept {
-                _Nodeptr _suc = node->_parent;
-                if (node->is_left() && !_suc->_right->_is_nil && !node->is_real_root()) {
-                    _suc = _suc->_right;
-                    while (!_suc->_left->_is_nil || !_suc->_right->_is_nil) {
-                        _suc = _Node::leftmost(_suc);
-                        if (!_suc->_right->_is_nil)
-                            _suc = _suc->_right;
-                    }
-                }
-                node = _suc;
-            }
+        }
+#elif defined LEVEL_ORDER_ITERATOR
+        static _Nodeptr _Fwd_explore(_Nodeptr node, size_type height) noexcept {
+            if (height == 0 || node->_is_nil)
+                return node;
+            _Nodeptr _res = _Fwd_explore(node->_left, height - 1);
+            if (!_res->_is_nil)
+                return _res;
+            return _Fwd_explore(node->_right, height - 1);
+        }
 
-            static void _Decr(_Nodeptr& node) noexcept {
-                if (node->_is_nil)
-                    node = node->_parent;
-                else if (!node->_right->_is_nil)
-                    node = node->_right;
-                else if (!node->_left->_is_nil)
-                    node = node->_left;
-                else {
-                    for (_Nodeptr _pre = node->_parent;; _pre = _pre->_parent) {
-                        if (node == _pre->_right && !_pre->_left->_is_nil) {
-                            node = _pre->_left;
-                            return;
-                        }
-                        node = _pre;
-                    }
-                }
-            }
-#elif defined _LEVEL_ORDER_ITERATOR_
-            static _Nodeptr _Fwd_explore(_Nodeptr node, size_type height) noexcept {
-                if (height == 0 || node->_is_nil)
-                    return node;
-                _Nodeptr _res = _Fwd_explore(node->_left, height - 1);
+        static _Nodeptr _Incr(_Nodeptr node, size_type height = 0) noexcept {
+            if (node->is_real_root())
+                return _Fwd_explore(node, height + 1);
+            if (node->is_left()) {
+                _Nodeptr _res = _Fwd_explore(node->_parent->_right, height);
                 if (!_res->_is_nil)
                     return _res;
-                return _Fwd_explore(node->_right, height - 1);
             }
+            return _Incr(node->_parent, height + 1);
+        }
 
-            static _Nodeptr _Incr(_Nodeptr node, size_type height = 0) noexcept {
-                if (node->is_real_root())
-                    return _Fwd_explore(node, height + 1);
-                if (node->is_left()) {
-                    _Nodeptr _res = _Fwd_explore(node->_parent->_right, height);
-                    if (!_res->_is_nil)
-                        return _res;
-                }
-                return _Incr(node->_parent, height + 1);
-            }
+        static void incr(_Nodeptr& node) noexcept { node = _Incr(node); }
 
-            static void incr(_Nodeptr& node) noexcept { node = _Incr(node); }
+        static _Nodeptr _Backwd_explore(_Nodeptr node, int height) noexcept {
+            if (height == 0 || node->_is_nil)
+                return node;
+            _Nodeptr _res = _Backwd_explore(node->_right, height - 1);
+            if (!_res->_is_nil)
+                return _res;
+            return _Backwd_explore(node->_left, height - 1);
+        }
 
-            static _Nodeptr _Backwd_explore(_Nodeptr node, int height) noexcept {
-                if (height == 0 || node->_is_nil)
-                    return node;
-                _Nodeptr _res = _Backwd_explore(node->_right, height - 1);
+        static _Nodeptr _Decr(_Nodeptr node, int height) noexcept {
+            if (node->is_real_root())
+                return _Backwd_explore(node, height - 1);
+            if (node->is_right()) {
+                _Nodeptr _res = _Backwd_explore(node->_parent->_left, height);
                 if (!_res->_is_nil)
                     return _res;
-                return _Backwd_explore(node->_left, height - 1);
             }
+            return _Decr(node->_parent, height + 1);
+        }
 
-            static _Nodeptr _Decr(_Nodeptr node, int height) noexcept {
-                if (node->is_real_root())
-                    return _Backwd_explore(node, height - 1);
-                if (node->is_right()) {
-                    _Nodeptr _res = _Backwd_explore(node->_parent->_left, height);
-                    if (!_res->_is_nil)
-                        return _res;
-                }
-                return _Decr(node->_parent, height + 1);
-            }
+        static void _Decr(_Nodeptr& node) noexcept { node = _Decr(node, 0); }
+#else  // INORDER_ITERATOR
 
-            static void _Decr(_Nodeptr& node) noexcept { node = _Decr(node, 0); }
-#else  //_INORDER_ITERATOR_
+        static void incr(_Nodeptr& node) noexcept { node = _Node::find_inorder_successor(node); }
 
-            static void incr(_Nodeptr& node) noexcept { node = _Node::find_inorder_successor(node); }
-
-            static void _Decr(_Nodeptr& node) noexcept {
-                node = node->_is_nil ? node->_right : _Node::find_inorder_predecessor(node);
-            }
+        static void _Decr(_Nodeptr& node) noexcept {
+            node = node->_is_nil ? node->_right : _Node::find_inorder_predecessor(node);
+        }
 #endif
 
-            static void decr(_Nodeptr& node) noexcept {
+        static void decr(_Nodeptr& node) noexcept {
+            auto _oldnode = node;
 
-                auto _oldnode = node;
+            _Decr(node);
+            XSTL_EXPECT(_oldnode != node, "iterators cannot decrease");
+        }
+        static value_type& extract(_Nodeptr node) noexcept { return node->_value; }
 
-                _Decr(node);
-                XSTL_EXPECT(("iterators cannot decrease", _oldnode != node));
-            }
-            static value_type& extract(_Nodeptr node) noexcept { return node->_value; }
+        static bool dereferable(const _Self* tree, _Nodeptr node) noexcept { return node != tree->_root; }
 
-            static bool dereferable(const _Self* tree, _Nodeptr node) noexcept { return node != tree->_root; }
+        static bool increasable(const _Self*, _Nodeptr node) noexcept { return !node->_is_nil; }
 
-            static bool incrable(const _Self*, _Nodeptr node) noexcept { return !node->_is_nil; }
+        static bool decreasable(const _Self* tree, _Nodeptr node) noexcept {
+            return true;  // always true because verification should be after decreasing
+        }
 
-            static bool decrable(const _Self* tree, _Nodeptr node) {
-                return true;  // always true because verification should be after decreasing
-            }
+        void swap(_Self& x) {
+            // no checking, because this swap is always be called in library
+            using std::swap;
+            swap(_root, x._root);
+        }
 
-            void swap(_Self& x) {
-                // no checking, because this swap is always be called in library
-                using std::swap;
-                swap(_root, x._root);
-            }
+        void init() noexcept { _Node::assign_node(_root, _root, _root, _root, BLACK, true); }
 
-            void init() noexcept { _Node::assign_node(_root, _root, _root, _root, BLACK, true); }
-
-            _Nodeptr _root{};
-        };
-    }  // namespace
+        _Nodeptr _root{};
+    };
+    //}  // namespace
     /**
      *	@class bs_tree
      *   @brief binary search tree.
@@ -342,15 +338,17 @@ namespace xstl {
         using _Scary_val                = typename _Traits::_Scary_val;
         using _Node                     = typename _Traits::_Scary_val::_Node;
         using _Nodeptr                  = typename _Traits::_Nodeptr;
-        using _Unchecked_const_iterator = xstl_iterator::unchecked_bid_citer<_Scary_val>;
+        using _Unchecked_const_iterator = iter_adapter::unchecked_bid_citer<_Scary_val>;
         using _Altp_traits              = typename _Traits::_Altp_traits;
         using _Alnode_type              = typename _Altp_traits::template rebind_alloc<_Node>;
         using _Alnode_traits            = std::allocator_traits<_Alnode_type>;
 
     public:
         friend struct _Tree_accessor;
-        using allocator_type  = typename _Traits::allocator_type;
-        using value_type      = typename _Traits::value_type;
+        using allocator_type = typename _Traits::allocator_type;
+        using value_type     = typename _Traits::value_type;
+        static_assert(std::is_same_v<typename allocator_type::value_type, value_type>,
+                      MISMATCH_ALLOCATOR_MESSAGE("[some]_map/set", "value_type"));
         using key_type        = typename _Traits::key_type;
         using key_compare     = typename _Traits::key_compare;
         using value_compare   = typename _Traits::value_compare;
@@ -363,7 +361,7 @@ namespace xstl {
 
         using const_iterator = typename _Traits::const_iterator;
         using iterator       = typename _Traits::iterator;
-#ifndef _LEVEL_ORDER_ITERATOR_
+#ifndef LEVEL_ORDER_ITERATOR
         using const_reverse_iterator = std::reverse_iterator<const_iterator>;
         using reverse_iterator       = std::reverse_iterator<iterator>;
 #endif
@@ -378,13 +376,13 @@ namespace xstl {
         };
 
     public:
-        [[nodiscard]] iterator       begin() noexcept { return _Make_iter(cbegin().base()); }
-        [[nodiscard]] const_iterator begin() const noexcept { return cbegin(); }
-        [[nodiscard]] const_iterator cbegin() const noexcept {
+        XSTL_NODISCARD iterator       begin() noexcept { return _Make_iter(cbegin().base()); }
+        XSTL_NODISCARD const_iterator begin() const noexcept { return cbegin(); }
+        XSTL_NODISCARD const_iterator cbegin() const noexcept {
             _Nodeptr _root = _Get_root();
-#if defined(_PREORDER_ITERATOR_) || defined(_LEVEL_ORDER_ITERATOR_)
+#if defined(PREORDER_ITERATOR) || defined(LEVEL_ORDER_ITERATOR)
             return _Make_citer(_root->_parent);
-#elif defined _POSTORDER_ITERATOR_
+#elif defined POSTORDER_ITERATOR
             _Nodeptr _curr = _root->_left != _root->_parent ? _root->_left : _root->_right;
             while (!_curr->_left->_is_nil || !_curr->_right->_is_nil) {
                 _curr = _Node::leftmost(_curr);
@@ -396,20 +394,20 @@ namespace xstl {
             return _Make_citer(_root->_left);
 #endif
         }
-        [[nodiscard]] iterator       end() noexcept { return _Make_iter(_Get_root()); }
-        [[nodiscard]] const_iterator end() const noexcept { return cend(); }
-        [[nodiscard]] const_iterator cend() const noexcept { return _Make_citer(const_cast<_Nodeptr>(_Get_root())); }
+        XSTL_NODISCARD iterator       end() noexcept { return _Make_iter(_Get_root()); }
+        XSTL_NODISCARD const_iterator end() const noexcept { return cend(); }
+        XSTL_NODISCARD const_iterator cend() const noexcept { return _Make_citer(const_cast<_Nodeptr>(_Get_root())); }
 
-#ifndef _LEVEL_ORDER_ITERATOR_
-        [[nodiscard]] reverse_iterator       rbegin() noexcept { return reverse_iterator(_Make_iter(crbegin().base().base())); }
-        [[nodiscard]] const_reverse_iterator rbegin() const noexcept { return crbegin(); }
+#ifndef LEVEL_ORDER_ITERATOR
+        XSTL_NODISCARD reverse_iterator       rbegin() noexcept { return reverse_iterator(_Make_iter(crbegin().base().base())); }
+        XSTL_NODISCARD const_reverse_iterator rbegin() const noexcept { return crbegin(); }
 
-        [[nodiscard]] const_reverse_iterator crbegin() const noexcept { return const_reverse_iterator(cend()); }
+        XSTL_NODISCARD const_reverse_iterator crbegin() const noexcept { return const_reverse_iterator(cend()); }
 
-        [[nodiscard]] reverse_iterator       rend() noexcept { return reverse_iterator(_Make_iter(crend().base().base())); }
-        [[nodiscard]] const_reverse_iterator rend() const noexcept { return crend(); }
+        XSTL_NODISCARD reverse_iterator       rend() noexcept { return reverse_iterator(_Make_iter(crend().base().base())); }
+        XSTL_NODISCARD const_reverse_iterator rend() const noexcept { return crend(); }
 
-        [[nodiscard]] const_reverse_iterator crend() const noexcept { return const_reverse_iterator(cbegin()); }
+        XSTL_NODISCARD const_reverse_iterator crend() const noexcept { return const_reverse_iterator(cbegin()); }
 #endif
         /**
          *	@brief constructs an empty bs_tree.
@@ -432,27 +430,27 @@ namespace xstl {
 
         _Bs_tree(const _Bs_tree& other, const allocator_type& alloc) : _tpl(other.key_comp(), alloc, std::ignore) {
             _Init();
-            exception_guard guard(_Get_root(), [&](_Nodeptr ptr) { _Node::destroy_node(_Getal(), ptr); });
+            pointer_guard guard(_Get_root(), [&](_Nodeptr ptr) { _Node::destroy_node(_Getal(), ptr); });
             _Copy<true>(other);
             guard.release();
         }
 
         _Bs_tree(_Bs_tree&& other) : _tpl(other.key_cmpr(), other._Getal(), std::ignore) {
             _Init();
-            _Swap(other);
+            _Swap_excluding_cmpr(other);
         }
 
         _Bs_tree(_Bs_tree&& other, const allocator_type& alloc) : _tpl(other.key_comp(), alloc, std::ignore) {
             _Init();
             if constexpr (!_Alnode_traits::is_always_equal::value) {
                 if (_Getal() != other._Getal()) {
-                    exception_guard guard(_Get_root(), [&](_Nodeptr ptr) { _Node::destroy_node(ptr); });
+                    pointer_guard guard(_Get_root(), [&](_Nodeptr ptr) { _Node::destroy_node(ptr); });
                     _Copy<false>(other);
                     guard.release();
                     return;
                 }
             }
-            _Swap(other);
+            _Swap_excluding_cmpr(other);
         }
 
         /**
@@ -462,21 +460,21 @@ namespace xstl {
          * 	@param cmpr : comparison function object to use for all comparisons of keys
          *   @param alloc : allocator to use for all memory allocations of this tree
          */
-        template <XSTL_REQUIRES_(xstl_iterator::is_input_iterator_v<_Iter>)>
+        template <class _Iter, XSTL_REQUIRES_(is_input_iterator_v<_Iter>)>
         _Bs_tree(_Iter first, _Iter last) : _Bs_tree() {
             insert(first, last);
         }
 
-        template <XSTL_REQUIRES_(xstl_iterator::is_input_iterator_v<_Iter>)>
+        template <class _Iter, XSTL_REQUIRES_(is_input_iterator_v<_Iter>)>
         _Bs_tree(_Iter first, _Iter last, const key_compare& cmpr) : _Bs_tree(cmpr) {
             insert(first, last);
         }
-        template <XSTL_REQUIRES_(xstl_iterator::is_input_iterator_v<_Iter>)>
+        template <class _Iter, XSTL_REQUIRES_(is_input_iterator_v<_Iter>)>
         _Bs_tree(_Iter first, _Iter last, const allocator_type& alloc) : _Bs_tree(alloc) {
             insert(first, last);
         }
 
-        template <XSTL_REQUIRES_(xstl_iterator::is_input_iterator_v<_Iter>)>
+        template <class _Iter, XSTL_REQUIRES_(is_input_iterator_v<_Iter>)>
         _Bs_tree(_Iter first, _Iter last, const key_compare& cmpr, const allocator_type& alloc) : _Bs_tree(cmpr, alloc) {
             insert(first, last);
         }
@@ -496,7 +494,7 @@ namespace xstl {
         /**
          *   @return the allocator associated with the container.
          */
-        [[nodiscard]] allocator_type get_allocator() const noexcept { return static_cast<allocator_type>(_Getal()); }
+        XSTL_NODISCARD allocator_type get_allocator() const noexcept { return static_cast<allocator_type>(_Getal()); }
 
         /**
          *   @brief insert a key into the tree.
@@ -533,12 +531,12 @@ namespace xstl {
          *	@return an iterator which points to new node
          */
         iterator insert(const_iterator position, const_reference value) {
-            XSTL_EXPECT(("tree iterator insert outside range", std::addressof(_Get_val()) == CAST2SCARY(position._Get_cont())));
+            XSTL_EXPECT(std::addressof(_Get_val()) == CAST2SCARY(position._Get_cont()), "tree iterator insert outside range");
 
             return _Emplace_hint(position.base(), value);
         }
         iterator insert(const_iterator position, value_type&& value) {
-            XSTL_EXPECT(("tree iterator insert outside range", std::addressof(_Get_val()) == CAST2SCARY(position._Get_cont())));
+            XSTL_EXPECT(std::addressof(_Get_val()) == CAST2SCARY(position._Get_cont()), "tree iterator insert outside range");
 
             return _Emplace_hint(position.base(), std::move(value));
         }
@@ -554,7 +552,7 @@ namespace xstl {
          *   @param first : the beginning of range of elements to insert
          *	@param last : the end of range of elements to insert
          */
-        template <XSTL_REQUIRES_(xstl_iterator::is_input_iterator_v<_Iter>)>
+        template <class _Iter, XSTL_REQUIRES_(is_input_iterator_v<_Iter>)>
         void insert(_Iter first, _Iter last) {
             for (; first != last; ++first)
                 _Emplace(*first);
@@ -591,7 +589,7 @@ namespace xstl {
          */
         template <class... _Args>
         iterator emplace_hint(const_iterator position, _Args&&... values) {
-            XSTL_EXPECT(("tree iterator insert outside range", std::addressof(_Get_val()) == CAST2SCARY(position._Get_cont())));
+            XSTL_EXPECT(std::addressof(_Get_val()) == CAST2SCARY(position._Get_cont()), "tree iterator insert outside range");
 
             return _Emplace_hint(position.base(), std::forward<_Args>(values)...);
         }
@@ -601,23 +599,23 @@ namespace xstl {
          *   @param key : key to compare the elements to.
          *	@return iterator pointing to the first element that is not less than key.
          */
-        [[nodiscard]] iterator       lower_bound(const key_type& key);
-        [[nodiscard]] const_iterator lower_bound(const key_type& key) const;
+        XSTL_NODISCARD iterator       lower_bound(const key_type& key);
+        XSTL_NODISCARD const_iterator lower_bound(const key_type& key) const;
         template <class _Key, class _Cmpr = key_compare, class = typename _Cmpr::is_transparent>
-        [[nodiscard]] iterator lower_bound(const _Key& key);
+        XSTL_NODISCARD iterator lower_bound(const _Key& key);
         template <class _Key, class _Cmpr = key_compare, class = typename _Cmpr::is_transparent>
-        [[nodiscard]] const_iterator lower_bound(const _Key& key) const;
+        XSTL_NODISCARD const_iterator lower_bound(const _Key& key) const;
         /**
          *   @brief return an iterator pointing to the first element that is greater than key.
          *   @param key : key to compare the elements to.
          *	@return iterator pointing to the first element that is greater than key.
          */
-        [[nodiscard]] iterator       upper_bound(const key_type& key);
-        [[nodiscard]] const_iterator upper_bound(const key_type& key) const;
+        XSTL_NODISCARD iterator       upper_bound(const key_type& key);
+        XSTL_NODISCARD const_iterator upper_bound(const key_type& key) const;
         template <class _Key, class _Cmpr = key_compare, class = typename _Cmpr::is_transparent>
-        [[nodiscard]] iterator upper_bound(const _Key& key);
+        XSTL_NODISCARD iterator upper_bound(const _Key& key);
         template <class _Key, class _Cmpr = key_compare, class = typename _Cmpr::is_transparent>
-        [[nodiscard]] const_iterator upper_bound(const _Key& key) const;
+        XSTL_NODISCARD const_iterator upper_bound(const _Key& key) const;
 
         /**
          *   @brief returns a range containing all elements with the given key in the tree.
@@ -626,30 +624,30 @@ namespace xstl {
          *	the first pointing to the first element that is not less than key
          *	and the second pointing to the first element greater than key.
          */
-        [[nodiscard]] std::pair<iterator, iterator>             equal_range(const key_type& key);
-        [[nodiscard]] std::pair<const_iterator, const_iterator> equal_range(const key_type& key) const;
+        XSTL_NODISCARD std::pair<iterator, iterator> equal_range(const key_type& key);
+        XSTL_NODISCARD std::pair<const_iterator, const_iterator> equal_range(const key_type& key) const;
         template <class _Key, class _Cmpr = key_compare, class = typename _Cmpr::is_transparent>
-        [[nodiscard]] std::pair<iterator, iterator> equal_range(const _Key& key);
+        XSTL_NODISCARD std::pair<iterator, iterator> equal_range(const _Key& key);
         template <class _Key, class _Cmpr = key_compare, class = typename _Cmpr::is_transparent>
-        [[nodiscard]] std::pair<const_iterator, const_iterator> equal_range(const _Key& key) const;
+        XSTL_NODISCARD std::pair<const_iterator, const_iterator> equal_range(const _Key& key) const;
 
         /**
          *	@brief Returns the number of elements with key that compares equivalent to the specified argument
          *	@param key : key of the elements to count.
          *	@return Number of elements with key that compares equivalent to key
          */
-        [[nodiscard]] size_type count(const key_type& key) const;
+        XSTL_NODISCARD size_type count(const key_type& key) const;
         template <class _Key, class _Cmpr = key_compare, class = typename _Cmpr::is_transparent>
-        [[nodiscard]] size_type count(const _Key& key) const;
+        XSTL_NODISCARD size_type count(const _Key& key) const;
 
         /**
          *	@brief Checks if there is an element with key equivalent to key in container.
          *	@param key : key of the elements to search for.
          *	@return true if there is such an element, otherwise false.
          */
-        [[nodiscard]] bool contains(const key_type& key) const;
+        XSTL_NODISCARD bool contains(const key_type& key) const;
         template <class _Key, class _Cmpr = key_compare, class = typename _Cmpr::is_transparent>
-        [[nodiscard]] bool contains(const _Key& key) const;
+        XSTL_NODISCARD bool contains(const _Key& key) const;
 
         /*
          *	@brief unlinks the node that contains the element pointed to by position and returns a node handle that owns it
@@ -689,13 +687,13 @@ namespace xstl {
          *	@return number of elements removed.
          */
         size_type erase(const key_type& value) noexcept(noexcept(_Equal_range(value))) {
-            auto [_first, _last] = _Equal_range(value);
-            size_type n          = 0;
+            auto      _res = _Equal_range(value);
+            size_type n    = 0;
 
-            for (; _first != _last; ++n) {
-                _Nodeptr _suc = _Node::find_inorder_successor(_first);
-                erase(_Make_citer(_first));
-                _first = _suc;
+            for (; _res.first != _res.second; ++n) {
+                _Nodeptr _suc = _Node::find_inorder_successor(_res.first);
+                erase(_Make_citer(_res.first));
+                _res.first = _suc;
             }
 
             return n;
@@ -720,30 +718,30 @@ namespace xstl {
          *	@param key : key of the element to search for
          *	@return iterator to an element with key equivalent to key
          */
-        [[nodiscard]] iterator       find(const key_type& key);
-        [[nodiscard]] const_iterator find(const key_type& key) const;
+        XSTL_NODISCARD iterator       find(const key_type& key);
+        XSTL_NODISCARD const_iterator find(const key_type& key) const;
         template <class _Key, class _Cmpr = key_compare, class = typename _Cmpr::is_transparent>
-        [[nodiscard]] iterator find(const _Key& value);
+        XSTL_NODISCARD iterator find(const _Key& value);
         template <class _Key, class _Cmpr = key_compare, class = typename _Cmpr::is_transparent>
-        [[nodiscard]] const_iterator find(const _Key& value) const;
+        XSTL_NODISCARD const_iterator find(const _Key& value) const;
 
         /**
          *	@brief get the height of tree.
          */
-        [[nodiscard]] size_type height() const noexcept;
+        XSTL_NODISCARD size_type height() const noexcept;
         /**
          *	@brief get the width of tree.
          */
-        [[nodiscard]] size_type width() const;
+        XSTL_NODISCARD size_type width() const;
         /**
          *	@return returns the number of elements in the bs_tree
          */
-        [[nodiscard]] size_type size() const noexcept { return _size; }
+        XSTL_NODISCARD size_type size() const noexcept { return _size; }
         /**
          *	@return returns the maximum number of elements the bs_tree is able to hold due to system or library implementation
          *limitations
          */
-        [[nodiscard]] size_type max_size() const noexcept {
+        XSTL_NODISCARD size_type max_size() const noexcept {
             return std::min<size_type>((std::numeric_limits<difference_type>::max)(), _Alnode_traits::max_size(_Getal()));
         }
 
@@ -751,7 +749,7 @@ namespace xstl {
          *	@brief checks if the container has no elements
          *	@return true if the container is empty, false otherwise
          */
-        [[nodiscard]] bool empty() const noexcept;
+        XSTL_NODISCARD bool empty() const noexcept;
 
         void swap(_Bs_tree& tree) noexcept(std::is_nothrow_swappable_v<key_compare>);
 
@@ -760,12 +758,12 @@ namespace xstl {
          *comp
          *	@return the key comparison function object
          */
-        [[nodiscard]] key_compare key_comp() const { return key_compare(); }
+        XSTL_NODISCARD key_compare key_comp() const { return key_compare(); }
         /*
          *	@brief returns a function object that compares objects of type
          *	@return the key comparison function object
          */
-        [[nodiscard]] value_compare value_comp() const { return value_compare(); }
+        XSTL_NODISCARD value_compare value_comp() const { return value_compare(); }
 
         /**
          *	@brief removes all elements from the bs_tree.
@@ -778,7 +776,7 @@ namespace xstl {
         }
 
         template <class _Traits, template <class, class> class... _MixIn>
-        [[nodiscard]] friend bool operator==(const _Bs_tree<_Traits, _MixIn...>& lhs, const _Bs_tree<_Traits, _MixIn...>& rhs) {
+        XSTL_NODISCARD friend bool operator==(const _Bs_tree<_Traits, _MixIn...>& lhs, const _Bs_tree<_Traits, _MixIn...>& rhs) {
             using _Nodeptr = typename _Traits::_Nodeptr;
             using _Node    = typename _Traits::_Node;
             if (lhs.size() != rhs.size())
@@ -799,7 +797,7 @@ namespace xstl {
 
 #ifdef __cpp_lib_concepts
         template <class _Traits, template <class, class> class... _MixIn>
-        [[nodiscard]] friend synth_three_way_result<typename _Bs_tree<_Traits, _MixIn...>::value_type>
+        XSTL_NODISCARD friend synth_three_way_result<typename _Traits::value_type>
         operator<=>(const _Bs_tree<_Traits, _MixIn...>& lhs, const _Bs_tree<_Traits, _MixIn...>& rhs) {
             using _Nodeptr  = typename _Traits::_Nodeptr;
             using _Node     = typename _Traits::_Node;
@@ -819,14 +817,14 @@ namespace xstl {
         }
 #else
         template <class _Traits, template <class, class> class... _MixIn>
-        [[nodiscard]] friend bool operator!=(const _Bs_tree<_Traits, _MixIn...>& lhs, const _Bs_tree<_Traits, _MixIn...>& rhs) {
+        XSTL_NODISCARD friend bool operator!=(const _Bs_tree<_Traits, _MixIn...>& lhs, const _Bs_tree<_Traits, _MixIn...>& rhs) {
             return !(lhs == rhs);
         }
 
         template <class _Traits, template <class, class> class... _MixIn>
-        [[nodiscard]] friend bool operator<(const _Bs_tree<_Traits, _MixIn...>& lhs, const _Bs_tree<_Traits, _MixIn...>& rhs) {
-            using _Nodeptr = typename _Traits::_Nodeptr;
-            using _Node = typename _Traits::_Node;
+        XSTL_NODISCARD friend bool operator<(const _Bs_tree<_Traits, _MixIn...>& lhs, const _Bs_tree<_Traits, _MixIn...>& rhs) {
+            using _Nodeptr  = typename _Traits::_Nodeptr;
+            using _Node     = typename _Traits::_Node;
             _Nodeptr _curr1 = lhs._Get_root()->_left, _curr2 = rhs._Get_root()->_left;
             while (!_curr1->_is_nil && !_curr2->_is_nil) {
                 if (std::less<>{}(_curr1->_value, _curr2->_value))
@@ -841,17 +839,17 @@ namespace xstl {
         }
 
         template <class _Traits, template <class, class> class... _MixIn>
-        [[nodiscard]] friend bool operator>(const _Bs_tree<_Traits, _MixIn...>& lhs, const _Bs_tree<_Traits, _MixIn...>& rhs) {
+        XSTL_NODISCARD friend bool operator>(const _Bs_tree<_Traits, _MixIn...>& lhs, const _Bs_tree<_Traits, _MixIn...>& rhs) {
             return rhs < lhs;
         }
 
         template <class _Traits, template <class, class> class... _MixIn>
-        [[nodiscard]] friend bool operator<=(const _Bs_tree<_Traits, _MixIn...>& lhs, const _Bs_tree<_Traits, _MixIn...>& rhs) {
+        XSTL_NODISCARD friend bool operator<=(const _Bs_tree<_Traits, _MixIn...>& lhs, const _Bs_tree<_Traits, _MixIn...>& rhs) {
             return !(rhs < lhs);
         }
 
         template <class _Traits, template <class, class> class... _MixIn>
-        [[nodiscard]] friend bool operator>=(const _Bs_tree<_Traits, _MixIn...>& lhs, const _Bs_tree<_Traits, _MixIn...>& rhs) {
+        XSTL_NODISCARD friend bool operator>=(const _Bs_tree<_Traits, _MixIn...>& lhs, const _Bs_tree<_Traits, _MixIn...>& rhs) {
             return !(lhs < rhs);
         }
 #endif
@@ -909,17 +907,13 @@ namespace xstl {
             if (max_size() == _size)
                 throw std::length_error(msg);
         }
-        void _Swap(_Self& other) {
+        void _Swap_excluding_cmpr(_Self& other) {
             using std::swap;
             _Get_val().swap(other._Get_val());
             swap(_size, _size);
         }
 
-        inline iterator       _Make_iter(_Nodeptr node) noexcept { return iterator(node, std::addressof(_Get_val())); }
-        inline const_iterator _Make_iter(_Nodeptr node) const noexcept {
-            return const_iterator(node, std::addressof(_Get_val()));
-        }
-        inline const_iterator _Make_citer(_Nodeptr node) noexcept { return const_iterator(node, std::addressof(_Get_val())); }
+        inline iterator       _Make_iter(_Nodeptr node) const noexcept { return iterator(node, std::addressof(_Get_val())); }
         inline const_iterator _Make_citer(_Nodeptr node) const noexcept {
             return const_iterator(node, std::addressof(_Get_val()));
         }
@@ -988,14 +982,16 @@ namespace xstl {
 
     template <class _Traits, template <class, class> class... _MixIn>
     typename _Bs_tree<_Traits, _MixIn...>::_Nodeptr _Bs_tree<_Traits, _MixIn...>::_Erase(_Nodeptr node) {
-        if (_Get_root()->_left == node)
-            _Get_root()->_left = node->_right->_is_nil ? node->_parent : _Node::leftmost(node->_right);
-        if (_Get_root()->_right == node)
-            _Get_root()->_right = node->_left->_is_nil ? node->_parent : _Node::rightmost(node->_left);
+        const _Nodeptr _root = _Get_root();
+        _Nodeptr       _suc  = nullptr;
+        if (_root->_left == node)
+            _suc = _root->_left = node->_right->_is_nil ? node->_parent : _Node::leftmost(node->_right);
+        if (_root->_right == node)
+            _suc = _root->_right = node->_left->_is_nil ? node->_parent : _Node::rightmost(node->_left);
+        if (_root->_parent == node)
+            _root->_parent = _suc ? _suc : node->_right->_is_nil ? _root : _Node::leftmost(node->_right);
         _Nodeptr _parent = _Traits::extract_node(this, node);
         _Node::destroy_node(_Getal(), node);
-        if (_Get_root()->_parent->_is_nil)
-            _Get_val().init();
         return _parent;
     }
 
@@ -1026,7 +1022,9 @@ namespace xstl {
     template <class _Traits, template <class, class> class... _MixIn>
     template <class... _Args>
     std::pair<typename _Bs_tree<_Traits, _MixIn...>::iterator, bool> _Bs_tree<_Traits, _MixIn...>::_Emplace(_Args&&... values) {
-        using _In_place_key_extractor = typename _Traits::template _In_place_key_extractor<std::remove_cvref_t<_Args>...>;
+        using _In_place_key_extractor =
+            typename _Traits::template _In_place_key_extractor<std::remove_cv_t<std::remove_reference_t<_Args>>...>;
+
         _Nodeptr     _new_node;
         _Find_result _res;
         if constexpr (_In_place_key_extractor::extractable && !_Multi) {
@@ -1104,7 +1102,8 @@ namespace xstl {
     template <class... _Args>
     typename _Bs_tree<_Traits, _MixIn...>::iterator _Bs_tree<_Traits, _MixIn...>::_Emplace_hint(_Nodeptr hint,
                                                                                                 _Args&&... values) {
-        using _In_place_key_extractor = typename _Traits::template _In_place_key_extractor<std::remove_cvref_t<_Args>...>;
+        using _In_place_key_extractor =
+            typename _Traits::template _In_place_key_extractor<std::remove_cv_t<std::remove_reference_t<_Args>>...>;
         _Nodeptr          _new_node;
         _Find_hint_result _res;
         if constexpr (_In_place_key_extractor::extractable && !_Multi) {
@@ -1128,13 +1127,12 @@ namespace xstl {
 
     template <class _Traits, template <class, class> class... _MixIn>
     typename _Bs_tree<_Traits, _MixIn...>::iterator _Bs_tree<_Traits, _MixIn...>::erase(const_iterator position) noexcept {
-        XSTL_EXPECT(("tree iterator insert outside range", std::addressof(_Get_val()) == CAST2SCARY(position._Get_cont())));
+        XSTL_EXPECT(std::addressof(_Get_val()) == CAST2SCARY(position._Get_cont()), "tree iterator insert outside range");
 
         if (position.base()->_is_nil)
             return end();
         _Nodeptr _curr = (position++).base();
         _Traits::erase_fixup(this, _Erase(_curr));
-        _Get_val().check_update(_curr);
         --_size;
         return _Make_iter(position.base());
     }
@@ -1142,8 +1140,9 @@ namespace xstl {
     template <class _Traits, template <class, class> class... _MixIn>
     typename _Bs_tree<_Traits, _MixIn...>::iterator _Bs_tree<_Traits, _MixIn...>::erase(const_iterator first,
                                                                                         const_iterator last) noexcept {
-        XSTL_EXPECT(("tree iterator insert outside range", std::addressof(_Get_val()) == CAST2SCARY(first._Get_cont())
-                                                               && std::addressof(_Get_val()) == CAST2SCARY(last._Get_cont())));
+        XSTL_EXPECT(std::addressof(_Get_val()) == CAST2SCARY(first._Get_cont())
+                        && std::addressof(_Get_val()) == CAST2SCARY(last._Get_cont()),
+                    "tree iterator insert outside range");
 
         if (first == begin() && last == end())
             clear();
@@ -1199,7 +1198,7 @@ namespace xstl {
 
     template <class _Traits, template <class, class> class... _MixIn>
     typename _Bs_tree<_Traits, _MixIn...>::iterator _Bs_tree<_Traits, _MixIn...>::insert(const_iterator hint, node_type&& nh) {
-        XSTL_EXPECT(("tree iterator insert outside range", std::addressof(_Get_val()) == CAST2SCARY(hint._Get_cont())));
+        XSTL_EXPECT(std::addressof(_Get_val()) == CAST2SCARY(hint._Get_cont()), "tree iterator insert outside range");
 
         if (nh.empty())
             return end();
@@ -1355,10 +1354,10 @@ namespace xstl {
 
     template <class _Traits, template <class, class> class... _MixIn>
     typename _Bs_tree<_Traits, _MixIn...>::node_type _Bs_tree<_Traits, _MixIn...>::extract(const_iterator position) {
-        XSTL_EXPECT(("tree iterator insert outside range", std::addressof(_Get_val()) == CAST2SCARY(position._Get_cont())));
+        XSTL_EXPECT(std::addressof(_Get_val()) == CAST2SCARY(position._Get_cont()), "tree iterator insert outside range");
 
         _Traits::extract_node(this, position.base());
-        return _Tree_accessor::make_handle<node_type>(CAST(position.base()), _Getal());
+        return _Tree_accessor::make_handle<node_type>(position.base(), _Getal());
     }
 
     template <class _Traits, template <class, class> class... _MixIn>
@@ -1385,7 +1384,7 @@ namespace xstl {
             if (this == std::addressof(x))
                 return;
         if constexpr (!_Alnode_traits::is_always_equal::value)
-            XSTL_EXPECT(("tree allocators incompatible for merge", _Getal() != x._Getal()));
+            XSTL_EXPECT(_Getal() != x._Getal(), "tree allocators incompatible for merge");
 
         _Nodeptr _curr = _Tree_accessor::root(std::addressof(x))->_left;
         while (!_curr->_is_nil) {
@@ -1413,39 +1412,62 @@ namespace xstl {
 
     template <class _Traits, template <class, class> class... _MixIn>
     typename _Bs_tree<_Traits, _MixIn...>::size_type _Bs_tree<_Traits, _MixIn...>::height() const noexcept {
-        std::function<size_type(_Nodeptr)> _get_height = [&](_Nodeptr node) {
-            return node->_is_nil ? 0 : (std::max)(_get_height(node->_left), _get_height(node->_right)) + 1;
+#ifdef __cpp_explicit_this_parameter
+        auto _get_height = [&](this auto self,
+#else
+        std::function<size_type(_Nodeptr)> _get_height = [&](
+#endif
+                               _Nodeptr node) {
+            return node->_is_nil ? 0
+                                 : (std::max)(
+#ifdef __cpp_explicit_this_parameter
+                                       self(node->_left), self(node->right)
+#else
+                                       _get_height(node->_left), _get_height(node->_right)
+#endif
+                                           )
+                                       + 1;
         };
         return _get_height(_Get_root()->_parent);
     }
 
     template <class _Traits, template <class, class> class... _MixIn>
     typename _Bs_tree<_Traits, _MixIn...>::size_type _Bs_tree<_Traits, _MixIn...>::width() const {
-        std::vector<int> wid;
-
-        std::function<void(_Nodeptr, size_type)> _get_width = [&](_Nodeptr node, size_type w) {
-            if (node->_is_nil)
-                return;
-            if (wid.size() <= w)
-                wid.push_back(1);
-            else
-                ++wid[w];
-            _get_width(node->_left, w + 1);
-            _get_width(node->_right, w + 1);
-        };
-        _get_width(_Get_val()._root, 0);
-        return *std::max_element(wid.cbegin(), wid.cend());
+        if (empty())
+            return 0;
+        std::queue<_Nodeptr> _wid;
+        size_type            _w = 1, _curw = _w;
+        _wid.push(_Get_root()->_parent);
+        while (!_wid.empty()) {
+            for (; _curw > 0; --_curw) {
+                _Nodeptr _front = _wid.front();
+                _wid.pop();
+                if (!_front->_left->_is_nil)
+                    _wid.push(_front->_left);
+                if (!_front->_right->_is_nil)
+                    _wid.push(_front->_right);
+            }
+            _curw = _wid.size();
+            if (_curw > _w)
+                _w = _curw;
+        }
+        return _w;
     }
 
     template <class _Traits, template <class, class> class... _MixIn>
     template <class _Elem, class _ElemTraits>
     void _Bs_tree<_Traits, _MixIn...>::display(std::basic_ostream<_Elem, _ElemTraits>& out) const {
-        bool _visited[128] = { false };
-
-        std::function<void(_Nodeptr, size_type, bool)> _display = [&](_Nodeptr node, size_type size, bool position) {
-            if (size >= 127)
+        constexpr size_type MAX_DEPTH = 128;
+        bool                _visited[MAX_DEPTH]{};
+#ifdef __cpp_explicit_this_parameter
+        auto _display = [&](this auto self,
+#else
+        std::function<void(_Nodeptr, size_type, bool)> _display = [&](
+#endif
+                            _Nodeptr node, size_type size, bool position) {
+            if (size > MAX_DEPTH)
                 return;
-            for (int i = 1; i < size; i++)
+            for (size_type i = 1; i < size; i++)
                 out << (_visited[i] ? static_cast<const _Elem*>("  │") : static_cast<const _Elem*>("   "));
             if (node->_is_nil)
                 out << (position ? static_cast<const _Elem*>("  ├─ ") : static_cast<const _Elem*>("  └─ "))
@@ -1460,9 +1482,15 @@ namespace xstl {
                 out << node->_value << static_cast<_Elem>('\n');
                 if (!node->_left->_is_nil || !node->_right->_is_nil) {
                     _visited[size + 1] = true;
+#ifdef __cpp_explicit_this_parameter
+                    self(node->_right, size + 1, 1);
+                    _visited[size + 1] = false;
+                    self(node->_left, size + 1, 0);
+#else
                     _display(node->_right, size + 1, 1);
                     _visited[size + 1] = false;
                     _display(node->_left, size + 1, 0);
+#endif
                 }
             }
         };
@@ -1504,7 +1532,7 @@ namespace xstl {
         if (this != std::addressof(x)) {
             using std::swap;
             swap(_Get_cmpr(), x._Get_cmpr());
-            _Swap(x);
+            _Swap_excluding_cmpr(x);
             alloc_pocs(_Getal(), x._Getal());
         }
     }
@@ -1574,7 +1602,7 @@ namespace xstl {
         }
 
         alloc_pocma(_al, _other_al);
-        _Swap(rhs);
+        _Swap_excluding_cmpr(rhs);
 
         return *this;
     }
@@ -1627,15 +1655,15 @@ namespace xstl {
         */
         template <class... _Mapped>
         iterator try_emplace(const_iterator hint, const key_type& key, _Mapped&&... mapped_value) {
-            XSTL_EXPECT(
-                ("tree iterator insert outside range", std::addressof(_Derptr()->_Get_val()) == CAST2SCARY(hint._Get_cont())));
+            XSTL_EXPECT(std::addressof(_Derptr()->_Get_val()) == CAST2SCARY(hint._Get_cont()),
+                        "tree iterator insert outside range");
 
             return _Try_emplace_hint(hint.base(), key, std::forward<_Mapped>(mapped_value)...);
         }
         template <class... _Mapped>
         iterator try_emplace(const_iterator hint, key_type&& key, _Mapped&&... mapped_value) {
-            XSTL_EXPECT(
-                ("tree iterator insert outside range", std::addressof(_Derptr()->_Get_val()) == CAST2SCARY(hint._Get_cont())));
+            XSTL_EXPECT(std::addressof(_Derptr()->_Get_val()) == CAST2SCARY(hint._Get_cont()),
+                        "tree iterator insert outside range");
 
             return _Try_emplace_hint(hint.base(), std::move(key), std::forward<_Mapped>(mapped_value)...);
         }
@@ -1663,16 +1691,16 @@ namespace xstl {
 
         template <class _Mapped>
         iterator insert_or_assign(const_iterator hint, const key_type& key, _Mapped&& mapped_value) {
-            XSTL_EXPECT(
-                ("tree iterator insert outside range", std::addressof(_Derptr()->_Get_val()) == CAST2SCARY(hint._Get_cont())));
+            XSTL_EXPECT(std::addressof(_Derptr()->_Get_val()) == CAST2SCARY(hint._Get_cont()),
+                        "tree iterator insert outside range");
 
             return _Insert_or_assign_hint(hint.base(), key, std::forward<_Mapped>(mapped_value));
         }
 
         template <class _Mapped>
         iterator insert_or_assign(const_iterator hint, key_type&& key, _Mapped&& mapped_value) {
-            XSTL_EXPECT(
-                ("tree iterator insert outside range", std::addressof(_Derptr()->_Get_val()) == CAST2SCARY(hint._Get_cont())));
+            XSTL_EXPECT(std::addressof(_Derptr()->_Get_val()) == CAST2SCARY(hint._Get_cont()),
+                        "tree iterator insert outside range");
 
             return _Insert_or_assign_hint(hint.base(), std::move(key), std::forward<_Mapped>(mapped_value));
         }
@@ -1788,14 +1816,14 @@ namespace xstl {
         constexpr _Node_handle() noexcept : _alloc_storage{} {}
 
         _Node_handle(_Node_handle&& x) noexcept : _node(std::exchange(x._node, nullptr)) {
-            std::construct_at(std::addressof(_Getal()), std::move(x._Getal()));
-            std::destroy_at(std::addressof(x._Getal()));
+            construct_in_place(_Getal(), std::move(x._Getal()));
+            destroy_in_place(x._Getal());
         }
 
         _Node_handle& operator=(_Node_handle&& rhs) noexcept {
             if (!_node && rhs._node) {
-                std::construct_at(std::addressof(_Getal()), std::move(rhs._Getal()));
-                std::destroy_at(std::addressof(rhs._Getal()));
+                construct_in_place(_Getal(), std::move(rhs._Getal()));
+                destroy_in_place(rhs._Getal());
                 _node = std::exchange(rhs._node, nullptr);
             }
             else if (!rhs._node || this == std::addressof(rhs))
@@ -1804,32 +1832,32 @@ namespace xstl {
                 _Alnode_type _alnode(_Getal());
                 _Node::destroy_node(_alnode, _node);
                 alloc_pocma(_Getal(), rhs._Getal());
-                std::destroy_at(std::addressof(rhs._Getal()));
+                destroy_in_place(rhs._Getal());
                 _node = std::exchange(rhs._node, nullptr);
             }
             return *this;
         }
 
-        [[nodiscard]] allocator_type get_allocator() const noexcept { return _Getal(); }
+        XSTL_NODISCARD allocator_type get_allocator() const noexcept { return _Getal(); }
 
         explicit operator bool() const noexcept { return _node != nullptr; }
 
-        [[nodiscard]] bool empty() const noexcept { return _node == nullptr; }
+        XSTL_NODISCARD bool empty() const noexcept { return _node == nullptr; }
 
         void swap(_Node_handle& x) noexcept {
             if (_node) {
                 if (x._node)
                     alloc_pocs(_Getal(), x._Getal());
                 else {
-                    std::construct_at(std::addressof(x._Getal()), std::move(_Getal()));
-                    std::destroy_at(std::addressof(_Getal()));
+                    construct_in_place(x._Getal(), std::move(_Getal()));
+                    destroy_in_place(_Getal());
                 }
             }
             else {
                 if (!x._node)
                     return;
-                std::construct_at(std::addressof(_Getal()), std::move(x._Getal()));
-                std::destroy_at(std::addressof(x._Getal()));
+                construct_in_place(_Getal(), std::move(x._Getal()));
+                destroy_in_place(x._Getal());
             }
             std::swap(_node, x._node);
         }
@@ -1838,7 +1866,7 @@ namespace xstl {
 
     private:
         _Nodeptr _Release() noexcept {
-            std::destroy_at(std::addressof(_Getal()));
+            destroy_in_place(_Getal());
             return std::exchange(_node, nullptr);
         }
 
@@ -1851,17 +1879,15 @@ namespace xstl {
                 _Alnode_type _alnode(_Getal());
                 _Altp_traits::destroy(_Getal(), std::addressof(_node->_value));
                 _Alnode_traits::deallocate(_alnode, _node, 1);
-                std::destroy_at(std::addressof(_Getal()));
+                destroy_in_place(_Getal());
                 _node = nullptr;
             }
         }
 
-        _Node_handle(const _Nodeptr ptr, const _Alloc& alloc) noexcept : _node(ptr) {
-            std::construct_at(std::addressof(_Getal()), alloc);
-        }
+        _Node_handle(const _Nodeptr ptr, const _Alloc& alloc) noexcept : _node(ptr) { construct_in_place(_Getal(), alloc); }
 
-        _Nodeptr _node{};
-        alignas(_Alloc) std::byte _alloc_storage[sizeof(_Alloc)];  // equals to std::optional
+        _Nodeptr                      _node{};
+        aligned_storage_for_t<_Alloc> _alloc_storage;  // equals to std::optional
     };
 
     struct _Tree_accessor {
@@ -1958,7 +1984,7 @@ namespace xstl {
             using value_type  = std::pair<const _Key, _Value>;
             using key_compare = _Compare;
             struct value_compare {
-                [[nodiscard]] bool operator()(const value_type& lhs, const value_type& rhs) const {
+                XSTL_NODISCARD bool operator()(const value_type& lhs, const value_type& rhs) const {
                     return key_compare()(lhs.first, rhs.first);
                 }
             };
@@ -2002,11 +2028,11 @@ namespace xstl {
             using reference       = value_type&;
             using const_reference = const value_type&;
 
-            using _Scary_val     = _Scary_tree<xstl_iterator::scary_iter_types<value_type, size_type, difference_type, pointer,
-                                                                           const_pointer, reference, const_reference, _Nodeptr>>;
-            using const_iterator = xstl_iterator::bid_citer<_Scary_val>;
+            using _Scary_val = _Tree_val<iter_adapter::scary_iter_types<_Nodeptr, value_type, size_type, difference_type, pointer,
+                                                                        const_pointer, reference, const_reference>>;
+            using const_iterator = iter_adapter::bid_citer<_Scary_val>;
             using iterator =
-                std::conditional_t<std::is_same_v<key_type, value_type>, const_iterator, xstl_iterator::bid_iter<_Scary_val>>;
+                std::conditional_t<std::is_same_v<key_type, value_type>, const_iterator, iter_adapter::bid_iter<_Scary_val>>;
 
             using _Traits_category = _Cate;
             using node_type        = _Node_handle<_Tree_node<value_type>, _Alloc, typename _Cate::node_handle_base>;
@@ -2048,15 +2074,11 @@ namespace xstl {
                 static_cast<_Crtp*>(this)->access_fixup(tree, node);
             }
 
-            template <class _Crtp,
-                      class = decltype(&std::declval<_Bs_tree<bs_traits<_Cate, _Alloc, _Mfl, _Crtp>, _MixIn...>>()::extract_node),
-                      template <class, class> class... _MixIn>
-            static _Nodeptr extract_node(_Bs_tree<bs_traits<_Cate, _Alloc, _Mfl, _Crtp>, _MixIn...>* tree, _Nodeptr node) {
-                return static_cast<_Crtp*>(this)->extract_node(tree, node);
-            }
             template <class _Traits, template <class, class> class... _MixIn>
             static _Nodeptr extract_node(_Bs_tree<_Traits, _MixIn...>* tree, _Nodeptr node) {
-                return extract_node_impl(tree, node);
+                const _Nodeptr _parent = extract_node_impl(tree, node), _root = _Tree_accessor::root(tree);
+                _Node::assign_node(node, _root, _root, _root, BLACK, node->_is_nil);
+                return _parent;
             }
 
         protected:
@@ -2099,16 +2121,13 @@ namespace xstl {
              *	@param suc : the successor of node.
              */
             template <class _Traits, template <class, class> class... _MixIn>
-            static _Nodeptr take_node(_Bs_tree<_Traits, _MixIn...>* tree, _Nodeptr node, _Nodeptr suc) noexcept {
-                if (node->is_real_root())
-                    _Tree_accessor::root(tree)->_parent = suc;
-                else if (node->is_left())
+            static void take_node(_Bs_tree<_Traits, _MixIn...>* tree, _Nodeptr node, _Nodeptr suc) noexcept {
+                if (node->is_left())
                     node->_parent->_left = suc;
                 else if (node->is_right())
                     node->_parent->_right = suc;
                 if (!suc->_is_nil)
                     suc->_parent = node->_parent;
-                return node->_parent;
             }
 
             /**
@@ -2117,27 +2136,32 @@ namespace xstl {
              *	@param node : the node need to be extracted.
              *	@return parent of node.
              */
+            template <
+                class _Crtp,
+                class = decltype(&std::declval<_Bs_tree<bs_traits<_Cate, _Alloc, _Mfl, _Crtp>, _MixIn...>>()::extract_node_impl),
+                template <class, class> class... _MixIn>
+            static _Nodeptr extract_node_impl(_Bs_tree<bs_traits<_Cate, _Alloc, _Mfl, _Crtp>, _MixIn...>* tree, _Nodeptr node) {
+                return static_cast<_Crtp*>(this)->extract_node_impl(tree, node);
+            }
+
             template <class _Traits, template <class, class> class... _MixIn>
             static _Nodeptr extract_node_impl(_Bs_tree<_Traits, _MixIn...>* tree, _Nodeptr node) noexcept {
-                _Nodeptr _parent;
                 if (node->_left->_is_nil)
-                    _parent = take_node(tree, node, node->_right);
+                    take_node(tree, node, node->_right);
                 else if (node->_right->_is_nil)
-                    _parent = take_node(tree, node, node->_left);
+                    take_node(tree, node, node->_left);
                 else {
                     _Nodeptr _suc = _Node::leftmost(node->_right);
                     if (_suc->_parent != node) {
-                        _parent               = take_node(tree, _suc, _suc->_right);
+                        take_node(tree, _suc, _suc->_right);
                         _suc->_right          = node->_right;
                         _suc->_right->_parent = _suc;
                     }
-                    _parent              = take_node(tree, node, _suc);
+                    take_node(tree, node, _suc);
                     _suc->_left          = node->_left;
                     _suc->_left->_parent = _suc;
                 }
-                node->_left = node->_right = node->_parent = _Tree_accessor::root(tree);
-                node->_prop                                = 0;
-                return _parent;
+                return node->_parent;
             }
         };
 
@@ -2372,24 +2396,23 @@ namespace xstl {
             }
 
             template <template <class, class> class... _MixIn>
-            static _Nodeptr extract_node(_Bs_tree<_Self, _MixIn...>* tree, _Nodeptr node) {
-                const _Nodeptr _root = _Tree_accessor::root(tree);
-                _Nodeptr       _suc  = node, _parent;
-                int            _prop = _suc->_prop;
+            static _Nodeptr extract_node_impl(_Bs_tree<_Self, _MixIn...>* tree, _Nodeptr node) {
+                _Nodeptr _fixnode;
+                int      _prop = node->_prop;
                 if (node->_left->_is_nil) {
-                    _parent = node->_right;
+                    _fixnode = node->_right;
                     take_node(tree, node, node->_right);
                 }
                 else if (node->_right->_is_nil) {
-                    _parent = node->_left;
+                    _fixnode = node->_left;
                     take_node(tree, node, node->_left);
                 }
                 else {
-                    _suc    = _Node::leftmost(node->_right);
-                    _prop   = _suc->_prop;
-                    _parent = _suc->_right;
+                    _Nodeptr _suc = _Node::leftmost(node->_right);
+                    _prop         = _suc->_prop;
+                    _fixnode      = _suc->_right;
                     if (_suc->_parent == node)
-                        _parent->_parent = _suc;
+                        _fixnode->_parent = _suc;
                     else {
                         take_node(tree, _suc, _suc->_right);
                         _suc->_right          = node->_right;
@@ -2400,29 +2423,29 @@ namespace xstl {
                     _suc->_left->_parent = _suc;
                     _suc->_prop          = node->_prop;
                 }
-                _Node::assign_node(node, _root, _root, _root, BLACK, node->_is_nil);
-                return _prop == BLACK ? _parent : _root->_parent;
+                return _prop == BLACK ? _fixnode : _Tree_accessor::root(tree)->_parent;
             }
         };
     }  // namespace
 
-#define _DEFINE_ASSO_CONTAINER(NAME)                                                                      \
-    template <class _Tp, class _Compare = std::less<>, class _Alloc = _DEFAULT_ALLOC(_Tp)>                \
-    using NAME##_set = _Bs_tree<NAME##_traits<_Set_traits<_Tp, _Compare>, _Alloc, false>>;                \
-    template <class _Tp, class _Compare = std::less<>, class _Alloc = _DEFAULT_ALLOC(_Tp)>                \
-    using NAME##_multiset = _Bs_tree<NAME##_traits<_Set_traits<_Tp, _Compare>, _Alloc, true>>;            \
-    template <class _Key, class _Value, class _Compare = std::less<>,                                     \
-              class _Alloc = xstl::alloc_wrapper<std::pair<const _Key, _Value>, xstl::defualt_alloc<0>>>  \
-    using NAME##_map = _Bs_tree<NAME##_traits<_Map_traits<_Key, _Value, _Compare>, _Alloc, false>, _Map>; \
-    template <class _Key, class _Value, class _Compare = std::less<>,                                     \
-              class _Alloc = xstl::alloc_wrapper<std::pair<const _Key, _Value>, xstl::defualt_alloc<0>>>  \
+#define MAP_VALUE_TYPE std::pair<const _Key, _Value>
+#define DEFINE_ASSO_CONTAINER(NAME)                                                                                 \
+    template <class _Tp, class _Compare = std::less<>, class _Alloc = DEFAULT_ALLOC(_Tp)>                           \
+    using NAME##_set = _Bs_tree<NAME##_traits<_Set_traits<_Tp, _Compare>, _Alloc, false>>;                          \
+    template <class _Tp, class _Compare = std::less<>, class _Alloc = DEFAULT_ALLOC(_Tp)>                           \
+    using NAME##_multiset = _Bs_tree<NAME##_traits<_Set_traits<_Tp, _Compare>, _Alloc, true>>;                      \
+    template <class _Key, class _Value, class _Compare = std::less<>, class _Alloc = DEFAULT_ALLOC(MAP_VALUE_TYPE)> \
+    using NAME##_map = _Bs_tree<NAME##_traits<_Map_traits<_Key, _Value, _Compare>, _Alloc, false>, _Map>;           \
+    template <class _Key, class _Value, class _Compare = std::less<>, class _Alloc = DEFAULT_ALLOC(MAP_VALUE_TYPE)> \
     using NAME##_multimap = _Bs_tree<NAME##_traits<_Map_traits<_Key, _Value, _Compare>, _Alloc, true>>;
 
-    _DEFINE_ASSO_CONTAINER(bs);
-    _DEFINE_ASSO_CONTAINER(avl);
-    _DEFINE_ASSO_CONTAINER(treap);
-    _DEFINE_ASSO_CONTAINER(splay);
-    _DEFINE_ASSO_CONTAINER(rb);
+    DEFINE_ASSO_CONTAINER(bs);
+    DEFINE_ASSO_CONTAINER(avl);
+    DEFINE_ASSO_CONTAINER(treap);
+    DEFINE_ASSO_CONTAINER(splay);
+    DEFINE_ASSO_CONTAINER(rb);
+#undef MAP_VALUE_TYPE
+#undef DEFINE_ASSO_CONTAINER
 
     template <class _Traits, template <class, class> class... _MixIn>
     _Bs_tree(const _Bs_tree<_Traits, _MixIn...>&, const typename _Traits::allocator_type& = typename _Traits::allocator_type())
@@ -2444,5 +2467,4 @@ namespace std {
         lhs.swap(rhs);
     }
 }  // namespace std
-#undef _DEFINE_ASSO_CONTAINER
 #endif

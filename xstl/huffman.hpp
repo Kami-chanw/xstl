@@ -61,7 +61,7 @@ namespace xstl {
         template <class _Alnode>
         inline _Huff_node* _Create_node(_Alnode& alloc, uint8_t value, int weight, _Huff_node* left = nullptr, _Huff_node* right = nullptr) {
             _Huff_node*     _node = alloc.allocate(1);
-            exception_guard _guard(_node, [](_Huff_node* node) { destroy_node(node); });
+            pointer_guard _guard(_node, [](_Huff_node* node) { destroy_node(node); });
             std::allocator_traits<_Alnode>::construct(alloc, std::addressof(_node->_value), value);
             _node->_left   = left;
             _node->_right  = right;
@@ -86,7 +86,7 @@ namespace xstl {
         using link_type  = _Huff_node*;
 
     public:
-        using const_iterator  = typename _HuffMap::const_iterator;
+        using xstl_const_iterator  = typename _HuffMap::xstl_const_iterator;
         using iterator        = typename _HuffMap::iterator;
         using value_type      = typename _HuffMap::value_type;
         using difference_type = typename _HuffMap::difference_type;
@@ -98,10 +98,10 @@ namespace xstl {
 
         iterator       begin() { return _code_map.begin(); }
         iterator       end() { return _code_map.end(); }
-        const_iterator begin() const { return _code_map.begin(); }
-        const_iterator end() const { return _code_map.end(); }
-        const_iterator cbegin() const { return _code_map.cbegin(); }
-        const_iterator cend() const { return _code_map.cend(); }
+        xstl_const_iterator begin() const { return _code_map.begin(); }
+        xstl_const_iterator end() const { return _code_map.end(); }
+        xstl_const_iterator cbegin() const { return _code_map.cbegin(); }
+        xstl_const_iterator cend() const { return _code_map.cend(); }
 
         huff_encoder() = default;
         /**

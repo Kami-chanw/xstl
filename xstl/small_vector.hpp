@@ -1,14 +1,10 @@
 #pragma once
-#include "config.hpp"
-#include <array>
-#include <cassert>      // for assertion diagnostics
-#include <cstddef>      // for size_t
-#include <cstdint>      // for fixed-width integer types
-#include <functional>   // for less and equal_to
-#include <iterator>     // for reverse_iterator and iterator traits
-#include <limits>       // for numeric_limits
-#include <stdexcept>    // for length_error
-#include <type_traits>  // for aligned_storage and all meta-functions
+#ifndef _SMALL_VECTOR_HPP_
+#define _SMALL_VECTOR_HPP_
+
+#include "allocator.hpp"
+#include "compressed_tuple.hpp"
+#include "iter_adapter.hpp"
 
 namespace xstl {
     namespace {
@@ -20,246 +16,16 @@ namespace xstl {
                 std::conditional_t<(N < std::numeric_limits<uint32_t>::max()), uint32_t,
                                    std::conditional_t<(N < std::numeric_limits<uint64_t>::max()), uint64_t, size_t>>>>;
 
-        template <std::ranges::random_access_range Rng, class Index>
-        constexpr decltype(auto) index(Rng&& rng, Index&& i) noexcept {
-            XSTL_EXPECT(static_cast<std::ptrdiff_t>(i) < (std::end(rng) - std::begin(rng)));
-            return std::begin(std::forward<Rng>(rng))[std::forward<Index>(i)];
-        }
-        template <class _Traits>
-        struct _Zero_sized {
-            using size_type       = typename _Traits::size_type;
-            using value_type      = typename _Traits::_Tp;
-            using difference_type = std::ptrdiff_t;
-            using pointer         = value_type*;
-            using const_pointer   = value_type const*;
-
-            static constexpr pointer   data() noexcept { return nullptr; }
-            static constexpr size_type size() noexcept { return 0; }
-            static constexpr size_type capacity() noexcept { return 0; }
-            static constexpr bool      empty() noexcept { return true; }
-            static constexpr bool      full() noexcept { return true; }
-
-            template <class... _Args>
-            static constexpr void emplace_back(_Args&&...) noexcept {
-                XSTL_EXPECT(false && "tried to emplace_back on empty storage");
-            }
-            static constexpr void pop_back() noexcept { XSTL_EXPECT(("tried to pop_back on empty storage", false)); }
-
-            static constexpr void unsafe_set_size(size_t new_size) noexcept {
-                XSTL_EXPECT(new_size == 0
-                            && "tried to change size of empty storage to "
-                               "non-zero value");
-            }
-
-            template <class _Iter>
-            static constexpr void unsafe_destroy(_Iter, _Iter) noexcept {}
-            static constexpr void unsafe_destroy_all() noexcept {}
-
-            template <class _Ty>
-            constexpr _Zero_sized(std::initializer_list<_Ty> l) noexcept {
-                XSTL_EXPECT(l.size() == 0
-                            && "tried to construct empty from a "
-                               "non-empty initializer list");
-            }
-        };
-
-        /// Storage for _Trivial types.
-        template <class _Tp, class _SizeType, _SizeType _Capacity, class = std::enable_if_t<std::is_trivial_v<_Tp>>>
-        struct _Trivial {
-            using size_type       = _SizeType;
-            using value_type      = _Tp;
-            using difference_type = ptrdiff_t;
-            using pointer         = _Tp*;
-            using const_pointer   = _Tp const*;
-
-        private:
-            using data_t = std::conditional_t<!std::is_const_v<_Tp>, std::array<_Tp, _Capacity>,
-                                              const std::array<std::remove_const_t<_Tp>, _Capacity>>;
-            alignas(alignof(_Tp)) data_t _data{};
-
-            size_type _size = 0;
-
-        public:
-            constexpr const_pointer    data() const noexcept { return _data.data(); }
-            constexpr pointer          data() noexcept { return _data.data(); }
-            constexpr size_type        size() const noexcept { return _size; }
-            static constexpr size_type capacity() noexcept { return _Capacity; }
-            constexpr bool             empty() const noexcept { return size() == size_type{ 0 }; }
-            constexpr bool             full() const noexcept { return size() == _Capacity; }
-
-            template <class... Args>
-            constexpr void emplace_back(Args&&... args) noexcept {
-                static_cast(!full(), "tried to emplace_back on full storage!");
-                index(_data, size()) = _Tp(forward<Args>(args)...);
-                unsafe_set_size(size() + 1);
-            }
-
-            constexpr void pop_back() noexcept {
-                static_cast(!empty(), "tried to pop_back from empty storage!");
-                unsafe_set_size(size() - 1);
-            }
-
-            constexpr void unsafe_set_size(size_t new_size) noexcept {
-                static_cast(new_size <= _Capacity, "new_size out-of-bounds [0, _Capacity]");
-                _size = size_type(new_size);
-            }
-
-            template <class _Iter>
-            constexpr void unsafe_destroy(_Iter, _Iter) noexcept {}
-
-            static constexpr void unsafe_destroy_all() noexcept {}
-
-        private:
-            template <class _Ty>
-            static constexpr std::array<std::remove_const_t<_Tp>, _Capacity>
-            unsafe_recast_init_list(std::initializer_list<_Ty>& l) noexcept {
-                XSTL_EXPECT(l.size() <= capacity()
-                            && "trying to construct storage from an "
-                               "initializer_list "
-                               "whose size exceeds the storage capacity");
-                std::array<std::remove_const_t<_Tp>, _Capacity> d_{};
-                for (size_t i = 0, e = l.size(); i < e; ++i) {
-                    index(d_, i) = index(l, i);
-                }
-                return d_;
-            }
-
-        public:
-            template <class _Ty>
-            constexpr trivial(std::initializer_list<_Ty> l) noexcept : _data(unsafe_recast_init_list(l)) {
-                unsafe_set_size(static_cast<size_type>(l.size()));
-            }
-        };
-
-        template <class _Tp, size_t _Capacity>
-        struct _Non_trivial {
-            static_assert(_Capacity != size_t{ 0 }, "Capacity must be greater than zero!");
-
-            using size_type       = _Smallest_size_t<_Capacity>;
-            using value_type      = _Tp;
-            using difference_type = ptrdiff_t;
-            using pointer         = _Tp*;
-            using const_pointer   = _Tp const*;
-
-            template <std::size_t Len, std::size_t Align>
-            struct aligned_storage {
-                struct type {
-                    alignas(Align) std::byte data[Len];
-                };
-            };
-
-        private:
-            size_type _size = 0;
-
-            using aligned_storage_t = aligned_storage<sizeof(std::remove_const_t<_Tp>), alignof(std::remove_const_t<_Tp>)>::type;
-            using data_t            = std::conditional_t<!std::is_const<_Tp>, aligned_storage_t, const aligned_storage_t>;
-            alignas(alignof(_Tp)) data_t _data[_Capacity]{};
-
-        public:
-            const_pointer              data() const noexcept { return reinterpret_cast<const_pointer>(_data); }
-            pointer                    data() noexcept { return reinterpret_cast<pointer>(_data); }
-            const_pointer              end() const noexcept { return data() + size(); }
-            pointer                    end() noexcept { return data() + size(); }
-            constexpr size_type        size() const noexcept { return _size; }
-            static constexpr size_type capacity() noexcept { return _Capacity; }
-            constexpr bool             empty() const noexcept { return size() == size_type{ 0 }; }
-            constexpr bool             full() const noexcept { return size() == _Capacity; }
-
-            template <class... Args>
-            void emplace_back(Args&&... args) noexcept(noexcept(new(end()) _Tp(std::forward<Args>(args)...))) {
-                XSTL_EXPECT(("tried to emplace_back on full storage", !full()));
-                new (end()) _Tp(std::forward<Args>(args)...);
-                unsafe_set_size(size() + 1);
-            }
-
-            void pop_back() noexcept(std::is_nothrow_destructible_v<_Tp>) {
-                XSTL_EXPECT(("tried to pop_back from empty storage!", !empty()));
-                std::destroy_at(std::launder(reinterpret_cast<_Tp*>(end() - 1)));
-                unsafe_set_size(size() - 1);
-            }
-
-            constexpr void unsafe_set_size(size_t new_size) noexcept {
-                XSTL_EXPECT(("new_size out-of-bounds [0)_Capacity)", new_size <= _Capacity));
-                _size = size_type(new_size);
-            }
-
-            template <class _Iter>
-            void unsafe_destroy(_Iter first, _Iter last) noexcept(std::is_nothrow_destructible_v<_Tp>) {
-                XSTL_EXPECT(("first is out-of-bounds", first >= data() && first <= end()));
-                XSTL_EXPECT(("last is out-of-bounds", last >= data() && last <= end()));
-                for (; first != last; ++first) {
-                    first->~_Tp();
-                }
-            }
-
-            void unsafe_destroy_all() noexcept(std::is_nothrow_destructible_v<_Tp>) { unsafe_destroy(data(), end()); }
-
-            constexpr _Non_trivial()                               = default;
-            constexpr _Non_trivial(_Non_trivial const&)            = default;
-            constexpr _Non_trivial& operator=(_Non_trivial const&) = default;
-            constexpr _Non_trivial(_Non_trivial&&)                 = default;
-            constexpr _Non_trivial& operator=(_Non_trivial&&)      = default;
-            ~_Non_trivial() noexcept(std::is_nothrow_destructible_v<_Tp>) { unsafe_destroy_all(); }
-
-            template <class _Ty, class = std::enable_if_t<std::is_convertible_v<_Ty, _Tp>>>
-            constexpr _Non_trivial(std::
-                                       : initializer_list<_Ty>
-                                           l) noexcept(noexcept(emplace_back(index(l, 0)))) {
-                XSTL_EXPECT(l.size() <= capacity()
-                            && "trying to construct storage from an "
-                               "initializer_list "
-                               "whose size exceeds the storage capacity");
-                for (size_t i = 0; i < l.size(); ++i) {
-                    emplace_back(index(l, i));
-                }
-            }
-        };
-
-        /// Selects the vector storage.
-        template <class _Tp, size_t _Capacity>
-        using _Storage = std::conditional_t<
-            _Capacity == 0, _Zero_sized<_Tp>,
-            std::conditional_t<std::is_trivial_v<_Tp>, _Trivial<_Tp, _Capacity>, _Non_trivial<_Tp, _Capacity>>>;
-
-        template <class _Tp, class... _Args>
-        struct _Conditions : _Conditions<std::bool_constant<_Tp::value>, _Tp, _Args...> {};
-
-        template <class _Ty>
-        struct _Conditions<_Ty> {
-            using type = _Ty;
-        };
-
-        template <class _Tp, class _Tp2, class... _Args>
-        struct _Conditions<std::false_type, _Tp, _Tp2, _Args...> : _Conditions<std::bool_constant<_Tp2::value>, _Tp2, _Args...> {
-        };
-
-        template <class _Tp, class... _Args>
-        struct _Conditions<std::true_type, _Tp, _Args...> {
-            static_assert(!std::is_void_v<std::void_t<typename _Conditions<_Args...>::type>>, "duplicate arguments");
-            using type = typename _Tp::type;
-        };
-
-        template <class _Tp, class _Ty>
-        struct _Conditions<std::false_type, _Tp, _Ty> {
-            using type = _Ty;
-        };
-
-        template <class... _Args>
-        using _Conditions_t = typename _Conditions<_Args...>::type;
-
-        template <size_t _Capacity, class... _Args>
+        template <class _Default, class... _Args>
         struct _Select_size_type {
-            template <class>
-            struct _Is_size_policy : std::false_type {};
-
-            template <class _SizeType>
-            struct _Is_size_policy<size_policy<_SizeType>> : std::bool_constant<std::is_integral_v<_SizeType>> {
-                using type = _SizeType;
+            template <class _Ty>
+            struct _Is_integral_type : std::is_integral<_Ty> {
+                using type = _Ty;
             };
-            using type = _Conditions_t<_Is_size_policy<_Args>..., _Smallest_size_t<_Capacity>>;
+            using type = select_type_t<_Is_integral_type<_Args>..., _Default>;
         };
 
-        template <class _Tp, class... _Args>
+        template <class _Default, class... _Args>
         struct _Select_allocator {
             template <class _Ty, class = void>
             struct _Is_allocator : std::false_type {};
@@ -272,482 +38,1001 @@ namespace xstl {
                 using type = _Ty;
             };
 
-            using type = _Conditions_t<_Is_allocator<_Args>..., std::allocator<_Tp>>;
+            using type = select_type_t<_Is_allocator<_Args>..., _Default>;
+        };
+
+        struct _Heap_policy {};
+    }  // namespace
+
+    struct UseHeap : _Heap_policy {};
+    struct AlwaysUseHeap : _Heap_policy {};
+
+    namespace {
+        template <class... _Args>
+        struct _Select_heap_policy {
+            template <class _Ty>
+            struct _Is_heap_policy : std::is_convertible<_Ty, _Heap_policy> {
+                using type = _Ty;
+            };
+            static constexpr bool use_heap        = std::is_same_v<select_type_t<_Is_heap_policy<_Args>..., void>, UseHeap>;
+            static constexpr bool always_use_heap = std::is_same_v<select_type_t<_Is_heap_policy<_Args>..., void>, AlwaysUseHeap>;
+        };
+
+        inline void* _Shift_pointer(void* p, size_t n) noexcept { return static_cast<char*>(p) + n; }
+        inline void* _Unshift_pointer(void* p, size_t n) noexcept { return static_cast<char*>(p) - n; }
+
+        template <class _Val_types, class _Vec_base>
+        struct _Vector_val : public container_val_base {
+            using _Self           = _Vector_val<_Val_types, _Vec_base>;
+            using _Nodeptr        = typename _Val_types::_Nodeptr;
+            using _Node           = typename _Val_types::_Node;
+            using value_type      = typename _Val_types::value_type;
+            using size_type       = typename _Val_types::size_type;
+            using difference_type = typename _Val_types::difference_type;
+            using pointer         = typename _Val_types::pointer;
+            using const_pointer   = typename _Val_types::const_pointer;
+            using reference       = value_type&;
+            using const_reference = const value_type&;
+
+            size_type capacity() const noexcept { return _vec.capacity(); }
+            void      set_capacity(size_type c) noexcept { _vec.set_capacity(c); }
+
+            bool is_data_inline() const noexcept { return !_size.is_extern(); }
+            void set_data_inline(bool is_inline) noexcept { _size.set_extern(!is_inline); }
+            bool is_capacity_inline() const noexcept { return !_size.is_heapified_capacity(); }
+            void set_capacity_inline(bool is_inline) noexcept { _size.set_heapified_capacity(!is_inline); }
+
+            constexpr size_type max_size() const noexcept { return _Actual_size_type::max_size(); }
+
+            size_type size() const noexcept { _size.size(); }
+            void      set_size(size_type sz) noexcept { _size.set_size(sz); }
+
+            size_type internal_size() const noexcept { return _size.internal_size(); }
+            void      set_internal_size(size_type sz) noexcept { _size.set_internal_size(sz); }
+
+            pointer       buffer() noexcept { return _vec.buffer(); }
+            const_pointer buffer() const noexcept { return _vec.buffer(); }
+            pointer       heap() noexcept { return _vec.heap(); }
+            const_pointer heap() const noexcept { return _vec.heap(); }
+
+            template <class _Alloc>
+            void free_all(_Alloc& alloc) {
+                if (!is_data_inline() && heap())
+                    alloc.deallocate(_Unshift_pointer(heap(), heapify_capacity_size),
+                                     _vec.capacity() * sizeof(value_type) + heapify_capacity_size);
+            }
+
+            template <class _Alloc>
+            void free_heap(pointer first, size_type n, _Alloc& alloc) {
+                if (!is_data_inline() && heap())
+                    alloc.deallocate(first, n * sizeof(value_type));
+            }
+
+            template <class _Iter, class _Alloc>
+            void destroy(_Iter first, _Iter last, _Alloc& alloc) {
+                if constexpr (!std::conjunction_v<std::is_trivially_destructible<value_type>,
+                                                  uses_default_destroy<_Alloc, pointer>>) {
+                    for (; first != last; ++first)
+                        std::allocator_traits<_Alloc>::destroy(alloc, std::addressof(*first));
+                }
+            }
+
+            void copy_inline_data(const _Self& right) {
+                // Copy the entire inline storage, instead of just size() values, to make
+                // the loop fixed-size and unrollable.
+                std::copy(right._vec.buffer(), right._vec.buffer() + _Vec_base::max_inline, _vec.buffer());
+                _size.set_size(right._size.size());
+            }
+
+            void swap_with_inline(const _Self& right) noexcept {}
+            void swap_with_extern(const _Self& right) {
+                _vec.swap_extern(right._vec);
+                _size.swap(right._size);
+            }
+
+        private:
+            static size_t constexpr heapify_capacity_size =
+                has_inline_capacity ? 0 : sizeof(xstl_aligned_storage_t<sizeof(size_type), alignof(value_type)>);
+
+            template <bool _Inline_capacity>
+            struct heap_ptr {
+                // heap[-heapify_capacity_size] contains capacity
+                value_type* _heap = nullptr;
+
+                size_type capacity() const noexcept {
+                    return _heap ? *static_cast<size_type*>(_Unshift_pointer(_heap, heapify_capacity_size)) : 0;
+                }
+                void set_capacity(size_type c) noexcept {
+                    *static_cast<size_type*>(_Unshift_pointer(_heap, heapify_capacity_size)) = c;
+                }
+
+                void swap(heap_ptr& right) noexcept { std::swap(_heap, right._heap); }
+            };
+
+            template <>
+            struct heap_ptr<true> {
+                size_type capacity() const noexcept { return _capacity; }
+                void      set_capacity(size_type c) noexcept { _capacity = c; }
+
+                void swap(heap_ptr<true>& right) noexcept {
+                    std::swap(_heap, right._heap);
+                    std::swap(_capacity, right._capacity);
+                }
+
+            private:
+                value_type* _heap = nullptr;
+                size_type   _capacity{ 0 };
+            };
+
+            using inline_storage_t =
+                std::conditional_t<sizeof(value_type) * _Vec_base::max_inline != 0,
+                                   aligned_storage_for_t<value_type[_Vec_base::max_inline ? _Vec_base::max_inline : 1u]>, char>;
+
+            static bool constexpr has_inline_capacity =
+                !_Vec_base::always_use_heap && sizeof(heap_ptr<true>) < sizeof(inline_storage_t);
+            // If the values are trivially copyable and the storage is small enough, copy
+            // it entirely. Limit is half of a cache line, to minimize probability of
+            // introducing a cache miss.
+            static constexpr bool is_trivially_inline_copyable =
+#ifdef __cpp_lib_hardware_interference_size
+                sizeof(inline_storage_t) <= std::hardware_constructive_interference_size / 2 &&
+#endif
+                std::is_trivially_copyable_v<value_type>;
+
+            union _Data {
+                explicit _Data() = default;
+
+                pointer       buffer() noexcept { return reinterpret_cast<pointer>(&_storage); }
+                const_pointer buffer() const noexcept { return const_cast<_Data*>(this)->buffer(); }
+                pointer       heap() noexcept { return _pdata._heap; }
+                const_pointer heap() const noexcept { return _pdata._heap; }
+
+                size_type capacity() const noexcept { return _pdata.capacity(); }
+                void      set_capacity(size_type c) noexcept { _pdata.set_capacity(c); }
+
+                void swap_inline(_Data& right) noexcept {}
+                void swap_extern(_Data& right) noexcept { _pdata.swap(right._pdata); }
+
+            private:
+                heap_ptr<has_inline_capacity> _pdata;
+                inline_storage_t              _storage;
+            };
+
+            struct _Actual_size_type {
+                static constexpr size_type max_size() noexcept { return size_type(~clear_mask); }
+
+                size_type size() const noexcept {
+                    if constexpr (_Vec_base::always_use_heap)
+                        return _val;
+                    else
+                        return _val & ~clear_mask;
+                }
+
+                void set_size(size_type sz) noexcept {
+                    XSTL_EXPECT(sz <= max_size(), "the size of small_vector exceeds max_size()");
+                    if constexpr (_Vec_base::always_use_heap)
+                        _val = sz;
+                    else
+                        _val = (clear_mask & _val) | size_type(sz);
+                }
+
+                size_type internal_size() const noexcept { return _val; }
+                void      set_internal_size(size_type sz) noexcept { _val = sz; }
+
+                bool is_extern() const noexcept {
+                    if constexpr (_Vec_base::always_use_heap)
+                        return true;
+                    else
+                        return extern_mask & _val;
+                }
+
+                void set_extern(bool b) noexcept {
+                    if constexpr (!_Vec_base::always_use_heap) {
+                        if (b)
+                            _val |= extern_mask;
+                        else
+                            _val &= ~extern_mask;
+                    }
+                }
+
+                bool is_heapified_capacity() const noexcept {
+                    if constexpr (_Vec_base::always_use_heap)
+                        return true;
+                    else
+                        return capacity_mask & _val;
+                }
+
+                void set_heapified_capacity(bool b) noexcept {
+                    if constexpr (!_Vec_base::always_use_heap) {
+                        if (b)
+                            _val |= capacity_mask;
+                        else
+                            _val &= ~capacity_mask;
+                    }
+                }
+
+                void swap(_Actual_size_type& right) noexcept { std::swap(_val, right._val); }
+
+            private:
+                // We reserve two most significant bits of _val.
+                static constexpr size_type extern_mask = _Vec_base::should_use_heap
+                                                             ? size_type(1) << (sizeof(size_type) * 8 - 1)
+                                                             : 0;  // 1000... If this bit is set to true, it means that the
+                                                                   // current data is stored externally (i.e. on the heap)
+                static constexpr size_type capacity_mask = _Vec_base::should_use_heap
+                                                               ? size_type(1) << (sizeof(size_type) * 8 - 2)
+                                                               : 0;  // 0100... If this bit is set to true, it means that the
+                                                                     // current capacity is stored externally (i.e. on the heap)
+                static constexpr size_type clear_mask = extern_mask | capacity_mask;  // 1100...
+
+                size_type _val{ 0 };
+            };
+
+            _Data             _vec;
+            _Actual_size_type _size;
+        };
+
+        // deal with policies
+        template <class _Tp, size_t _Capacity, class... _Policies>
+        class _Small_vector_base {
+        public:
+            static constexpr bool use_heap        = _Select_heap_policy<_Policies...>::use_heap;
+            static constexpr bool always_use_heap = _Select_heap_policy<_Policies...>::always_use_heap;
+            static constexpr bool should_use_heap = use_heap || always_use_heap;
+
+            static constexpr std::size_t max_inline{ _Capacity == 0 ? 0 : (std::max)(sizeof(_Tp*) / sizeof(_Tp), _Capacity) };
+
+            using allocator_type = _Select_allocator<std::allocator<_Tp>, _Policies...>::type;
+            using size_type =
+                _Select_size_type<std::conditional_t<should_use_heap, _Smallest_size_t<_Capacity>, size_t>, _Policies...>::type;
         };
     }  // namespace
 
-    template <class _SizeType>
-    struct size_policy {};
-
-    template <class _Iter, size_t Capacity, class... Policies>
-    struct small_vector : private _Storage<T, Capacity> {
-    private:
-        static_assert(is_nothrow_destructible_v<T>, "T must be nothrow destructible");
-        using base_t = _Storage<T, Capacity>;
-        using self   = small_vector<T, Capacity>;
-
-        using base_t::unsafe_destroy;
-        using base_t::unsafe_destroy_all;
-        using base_t::unsafe_set_size;
+    template <class _Tp, size_t _Capacity, class... _Policies>
+    class small_vector : private _Small_vector_base<_Tp, _Capacity, _Policies...> {
+        using _Base = _Small_vector_base<_Tp, _Capacity, _Policies...>;
+        using _Self = small_vector<_Tp, _Capacity, _Policies...>;
 
     public:
-        using value_type             = typename base_t::value_type;
-        using difference_type        = ptrdiff_t;
-        using reference              = value_type&;
-        using const_reference        = value_type const&;
-        using pointer                = typename base_t::pointer;
-        using const_pointer          = typename base_t::const_pointer;
-        using iterator               = typename base_t::pointer;
-        using const_iterator         = typename base_t::const_pointer;
-        using size_type              = size_t;
-        using reverse_iterator       = ::std::reverse_iterator<iterator>;
-        using const_reverse_iterator = ::std::reverse_iterator<const_iterator>;
+        using allocator_type = typename _Base::allocator_type;
+        using _Alloc_traits  = std::allocator_traits<allocator_type>;
+        static_assert(std::is_same_v<typename allocator_type::value_type, _Tp>, "small_vector<T, Capacity, ...>", "T");
+        using value_type                = _Tp;
+        using difference_type           = std::ptrdiff_t;
+        using reference                 = value_type&;
+        using const_reference           = const value_type&;
+        using pointer                   = value_type*;
+        using const_pointer             = const value_type*;
+        using size_type                 = typename _Base::size_type;
+        using _Scary_val                = _Vector_val<iter_adapter::scary_iter_types<pointer, value_type, size_type>, _Base>;
+        using iterator                  = iter_adapter::rand_iter<_Scary_val>;
+        using const_iterator            = iter_adapter::rand_citer<_Scary_val>;
+        using _Unchecked_const_iterator = iter_adapter::unchecked_rand_citer<_Scary_val>;
+        using _Unchecked_iterator       = iter_adapter::unchecked_rand_iter<_Scary_val>;
+        using reverse_iterator          = std::reverse_iterator<iterator>;
+        using const_reverse_iterator    = std::reverse_iterator<const_iterator>;
 
-        /// \name Size / capacity
-        ///@{
-        using base_t::empty;
-        using base_t::full;
+        small_vector() noexcept(std::is_nothrow_default_constructible_v<allocator_type>) {}
 
-        /// Number of elements in the vector
-        constexpr size_type size() const noexcept { return base_t::size(); }
+        explicit small_vector(const allocator_type& alloc) noexcept : _tpl(std::ignore, alloc) {}
 
-        /// Maximum number of elements that can be allocated in the vector
-        static constexpr size_type capacity() noexcept { return base_t::capacity(); }
-
-        /// Maximum number of elements that can be allocated in the vector
-        static constexpr size_type max_size() noexcept { return capacity(); }
-
-        ///@} // Size / capacity
-
-        /// \name Data access
-        ///@{
-
-        using base_t::data;
-
-        ///@} // Data access
-
-        /// \name Iterators
-        ///@{
-
-        constexpr iterator       begin() noexcept { return data(); }
-        constexpr const_iterator begin() const noexcept { return data(); }
-        constexpr iterator       end() noexcept { return data() + size(); }
-        constexpr const_iterator end() const noexcept { return data() + size(); }
-
-        reverse_iterator       rbegin() noexcept { return reverse_iterator(end()); }
-        const_reverse_iterator rbegin() const noexcept { return const_reverse_iterator(end()); }
-        reverse_iterator       rend() noexcept { return reverse_iterator(begin()); }
-        const_reverse_iterator rend() const noexcept { return const_reverse_iterator(begin()); }
-
-        constexpr const_iterator cbegin() noexcept { return begin(); }
-        constexpr const_iterator cbegin() const noexcept { return begin(); }
-        constexpr const_iterator cend() noexcept { return end(); }
-        constexpr const_iterator cend() const noexcept { return end(); }
-
-        ///@}  // Iterators
-
-    private:
-        /// \name Iterator bound-check utilites
-        ///@{
-
-        template <typename It>
-        constexpr void assert_iterator_in_range(It it) noexcept {
-            static_assert(Pointer<It>);
-            XSTL_EXPECT(begin() <= it && "iterator not in range");
-            XSTL_EXPECT(it <= end() && "iterator not in range");
-        }
-
-        template <typename It0, typename It1>
-        constexpr void assert_valid_iterator_pair(It0 first, It1 last) noexcept {
-            static_assert(Pointer<It0>);
-            static_assert(Pointer<It1>);
-            XSTL_EXPECT(first <= last && "invalid iterator pair");
-        }
-
-        template <typename It0, typename It1>
-        constexpr void assert_iterator_pair_in_range(It0 first, It1 last) noexcept {
-            assert_iterator_in_range(first);
-            assert_iterator_in_range(last);
-            assert_valid_iterator_pair(first, last);
-        }
-
-        ///@}
-    public:
-        /// \name Element access
-        ///
-        ///@{
-
-        /// Unchecked access to element at index \p pos (UB if index not in
-        /// range)
-        constexpr reference operator[](size_type pos) noexcept { return index(*this, pos); }
-
-        /// Unchecked access to element at index \p pos (UB if index not in
-        /// range)
-        constexpr const_reference operator[](size_type pos) const noexcept { return index(*this, pos); }
-
-        /// Checked access to element at index \p pos (throws `out_of_range`
-        /// if index not in range)
-        constexpr reference at(size_type pos) {
-            if (XSTL_UNLIKELY(pos >= size())) {
-                throw out_of_range("small_vector::at");
+        small_vector(const small_vector& right)
+            : _tpl(std::ignore, _Alloc_traits::select_on_container_copy_construction(right._Getal())) {
+            if constexpr (_Scary_val::is_trivially_inline_copyable) {
+                if (right._Get_val().is_data_inline()) {
+                    _Get_val().copy_inline_data(right._Get_val());
+                    return;
+                }
             }
-            return index(*this, pos);
-        }
-
-        /// Checked access to element at index \p pos (throws `out_of_range`
-        /// if index not in range)
-        constexpr const_reference at(size_type pos) const {
-            if (XSTL_UNLIKELY(pos >= size())) {
-                throw out_of_range("small_vector::at");
+            auto _sz = right.size();
+            _Allocate_for(_sz);
+            {
+                auto _guard = scoped_guard([&] { _Get_val().free_all(_Getal()); });
+                std::uninitialized_copy(right._Unchecked_begin(), right._Unchecked_begin() + static_cast<difference_type>(_sz),
+                                        _Unchecked_begin());
+                _guard.dismiss();
             }
-            return index(*this, pos);
+            _Get_val()->set_size(_sz);
         }
 
-        ///
-        constexpr reference       front() noexcept { return index(*this, 0); }
-        constexpr const_reference front() const noexcept { return index(*this, 0); }
-
-        constexpr reference back() noexcept {
-            XSTL_EXPECT(!empty() && "calling back on an empty vector");
-            return index(*this, size() - 1);
-        }
-        constexpr const_reference back() const noexcept {
-            XSTL_EXPECT(!empty() && "calling back on an empty vector");
-            return index(*this, size() - 1);
-        }
-
-        ///@} // Element access
-
-        /// \name Modifiers
-        ///@{
-
-        using base_t::emplace_back;
-        using base_t::pop_back;
-
-        /// Clears the vector.
-        constexpr void clear() noexcept {
-            unsafe_destroy_all();
-            unsafe_set_size(0);
-        }
-
-        /// Appends \p value at the end of the vector.
-        template <typename U, XSTL_REQUIRES_(Constructible<T, U>&& Assignable<reference, U&&>)>
-        constexpr void push_back(U&& value) noexcept(noexcept(emplace_back(forward<U>(value)))) {
-            XSTL_EXPECT(!full() && "vector is full!");
-            emplace_back(forward<U>(value));
-        }
-
-        /// Appends a default constructed `T` at the end of the vector.
-        XSTL_REQUIRES(Constructible<T, T>&& Assignable<reference, T&&>)
-        void push_back() noexcept(noexcept(emplace_back(T{}))) {
-            XSTL_EXPECT(!full() && "vector is full!");
-            emplace_back(T{});
-        }
-
-        template <typename... Args, XSTL_REQUIRES_(Constructible<T, Args...>)>
-        constexpr iterator
-        emplace(const_iterator position,
-                Args&&... args) noexcept(noexcept(move_insert(position, declval<value_type*>(), declval<value_type*>()))) {
-            XSTL_EXPECT(!full() && "tried emplace on full small_vector!");
-            assert_iterator_in_range(position);
-            value_type a(forward<Args>(args)...);
-            return move_insert(position, &a, &a + 1);
-        }
-        XSTL_REQUIRES(CopyConstructible<T>)
-        constexpr iterator insert(const_iterator  position,
-                                  const_reference x) noexcept(noexcept(insert(position, size_type(1), x))) {
-            XSTL_EXPECT(!full() && "tried insert on full small_vector!");
-            assert_iterator_in_range(position);
-            return insert(position, size_type(1), x);
-        }
-
-        XSTL_REQUIRES(MoveConstructible<T>)
-        constexpr iterator insert(const_iterator position, value_type&& x) noexcept(noexcept(move_insert(position, &x, &x + 1))) {
-            XSTL_EXPECT(!full() && "tried insert on full small_vector!");
-            assert_iterator_in_range(position);
-            return move_insert(position, &x, &x + 1);
-        }
-
-        XSTL_REQUIRES(CopyConstructible<T>)
-        constexpr iterator insert(const_iterator position, size_type n, const T& x) noexcept(noexcept(push_back(x))) {
-            assert_iterator_in_range(position);
-            const auto new_size = size() + n;
-            XSTL_EXPECT(new_size <= capacity() && "trying to insert beyond capacity!");
-            auto b = end();
-            while (n != 0) {
-                push_back(x);
-                --n;
+        small_vector(small_vector&& right) noexcept(std::is_nothrow_move_constructible_v<value_type>)
+            : _tpl(std::ignore, std::move(right._Getal())) {
+            if (right._Get_val().is_data_inline()) {
+                if (_Scary_val::is_trivially_inline_copyable) {
+                    _Get_val().copy_inline_data(right._Get_val());
+                    right._Get_val().set_internal_size(0);
+                }
+                else {
+                    std::uninitialized_copy(std::make_move_iterator(right._Unchecked_begin()),
+                                            std::make_move_iterator(right._Unchecked_end()), _Unchecked_begin());
+                    _Get_val()->set_size(right.size());
+                    right.clear();
+                }
             }
-
-            auto writable_position = begin() + (position - begin());
-            slow_rotate(writable_position, b, end());
-            return writable_position;
+            else
+                _Get_val().swap_with_extern(right._Get_val());
         }
 
-        template <class InputIt,
-                  XSTL_REQUIRES_(InputIterator<InputIt>and Constructible<value_type, iterator_reference_t<InputIt>>)>
-        constexpr iterator insert(const_iterator position, InputIt first, InputIt last) noexcept(noexcept(emplace_back(*first))) {
-            assert_iterator_in_range(position);
-            assert_valid_iterator_pair(first, last);
-            if constexpr (random_access_iterator_v<InputIt>) {
-                XSTL_EXPECT(size() + static_cast<size_type>(last - first) <= capacity() && "trying to insert beyond capacity!");
-            }
-            auto b = end();
+        small_vector(std::initializer_list<value_type> il, const allocator_type& alloc = allocator_type())
+            : small_vector(il.begin(), il.end(), alloc) {}
 
-            // insert at the end and then just rotate:
-            // cannot use try in constexpr function
-            // try {  // if copy_constructor throws you get basic-guarantee?
-            for (; first != last; ++first) {
-                emplace_back(*first);
-            }
-            // } catch (...) {
-            //   erase(b, end());
-            //   throw;
-            // }
-
-            auto writable_position = begin() + (position - begin());
-            slow_rotate(writable_position, b, end());
-            return writable_position;
-        }
-
-        template <class InputIt, XSTL_REQUIRES_(InputIterator<InputIt>)>
-        constexpr iterator move_insert(const_iterator position, InputIt first,
-                                       InputIt last) noexcept(noexcept(emplace_back(move(*first)))) {
-            assert_iterator_in_range(position);
-            assert_valid_iterator_pair(first, last);
-            if constexpr (random_access_iterator_v<InputIt>) {
-                XSTL_EXPECT(size() + static_cast<size_type>(last - first) <= capacity() && "trying to insert beyond capacity!");
-            }
-            iterator b = end();
-
-            // we insert at the end and then just rotate:
-            for (; first != last; ++first) {
-                emplace_back(move(*first));
-            }
-            auto writable_position = begin() + (position - begin());
-            slow_rotate<iterator>(writable_position, b, end());
-            return writable_position;
-        }
-
-        XSTL_REQUIRES(CopyConstructible<T>)
-        constexpr iterator insert(const_iterator      position,
-                                  initializer_list<T> il) noexcept(noexcept(insert(position, il.begin(), il.end()))) {
-            assert_iterator_in_range(position);
-            return insert(position, il.begin(), il.end());
-        }
-
-        XSTL_REQUIRES(Movable<value_type>)
-        constexpr iterator erase(const_iterator position) noexcept {
-            assert_iterator_in_range(position);
-            return erase(position, position + 1);
-        }
-
-        XSTL_REQUIRES(Movable<value_type>)
-        constexpr iterator erase(const_iterator first, const_iterator last) noexcept {
-            assert_iterator_pair_in_range(first, last);
-            iterator p = begin() + (first - begin());
-            if (first != last) {
-                unsafe_destroy(move(p + (last - first), end(), p), end());
-                unsafe_set_size(size() - static_cast<size_type>(last - first));
-            }
-
-            return p;
-        }
-
-        XSTL_REQUIRES(Assignable<T&, T&&>)
-        constexpr void swap(small_vector& other) noexcept(is_nothrow_swappable_v<T>) {
-            small_vector tmp = move(other);
-            other            = move(*this);
-            (*this)          = move(tmp);
-        }
-
-        /// Resizes the container to contain \p sz elements. If elements
-        /// need to be appended, these are copy-constructed from \p value.
-        ///
-        XSTL_REQUIRES(CopyConstructible<T>)
-        constexpr void resize(size_type sz, T const& value) noexcept(is_nothrow_copy_constructible_v<T>) {
-            if (sz == size()) {
+        template <class... _Args>
+        void _Construct_n(size_type n, _Args&&... args) {
+            if (n == 0)
                 return;
+            _Scary_val& _val = _Get_val();
+            auto&       _al  = _Getal();
+            _Allocate_for(n);
+            pointer _first = data(), _last = _first;
+            auto    _guard = scoped_guard([&] {
+                _val.destroy(_first, _last, _al);
+                _val.free_all();
+            });
+            if constexpr (sizeof...(args) == 0) {
+                if constexpr (std::is_scalar_v<value_type> && !std::is_volatile_v<value_type>)
+                    memset(_first, 0, n * sizeof(value_type));
+                else {
+                    do {
+                        _Alloc_traits::construct(_al, _last);
+                        _last++;
+                    } while (--n != 0)
+                }
             }
-            if (sz > size()) {
-                XSTL_EXPECT(sz <= capacity()
-                            && "small_vector cannot be resized to "
-                               "a size greater than capacity");
-                insert(end(), sz - size(), value);
+            else if constexpr (sizeof...(args) == 1) {
+                static_assert(std::is_same_v<_Args..., const_reference>);
+                do {
+                    _Alloc_traits::construct(_al, _last, args...);
+                    _last++;
+                } while (--n != 0);
+            }
+            else if constexpr (sizeof...(args) == 2) {
+                _My_data._Mylast = _Uninitialized_copy(_STD forward<argsty>(args)..., _My_data._Myfirst, _Al);
             }
             else {
-                erase(end() - (size() - sz), end());
+                static_assert(always_false<_Args...>, "Should be unreachable");
             }
+            _val.set_internal_size(n);
+            _guard.dismiss();
         }
 
-    private:
-        XSTL_REQUIRES(MoveConstructible<T> or CopyConstructible<T>)
-        constexpr void emplace_n(size_type n) noexcept((MoveConstructible<T> && is_nothrow_move_constructible_v<T>)
-                                                       || (CopyConstructible<T> && is_nothrow_copy_constructible_v<T>)) {
-            XSTL_EXPECT(n <= capacity()
-                        && "small_vector cannot be "
-                           "resized to a size greater than "
-                           "capacity");
-            while (n != size()) {
-                emplace_back(T{});
-            }
+        explicit small_vector(size_type n, const allocator_type& alloc = allocator_type()) : _tpl(std::ignore, alloc) {
+            _Construct_n(n);
         }
 
-    public:
-        /// Resizes the container to contain \p sz elements. If elements
-        /// need to be appended, these are move-constructed from `T{}` (or
-        /// copy-constructed if `T` is not `MoveConstructible`).
-        XSTL_REQUIRES(Movable<value_type>)
-        constexpr void resize(size_type sz) noexcept((MoveConstructible<T> && is_nothrow_move_constructible_v<T>)
-                                                     || (CopyConstructible<T> && is_nothrow_copy_constructible_v<T>)) {
-            if (sz == size()) {
-                return;
-            }
-
-            if (sz > size()) {
-                emplace_n(sz);
-            }
-            else {
-                erase(end() - (size() - sz), end());
-            }
+        small_vector(size_type n, const_reference value, const allocator_type& alloc = allocator_type())
+            : _tpl(std::ignore, alloc) {
+            _Construct_n(n, value);
         }
 
-        ///@}  // Modifiers
-
-        /// \name Construct/copy/move/destroy
-        ///@{
-
-        /// Default constructor.
-        constexpr small_vector() = default;
-
-        /// Copy constructor.
-        XSTL_REQUIRES(CopyConstructible<value_type>)
-        constexpr small_vector(small_vector const& other) noexcept(noexcept(insert(begin(), other.begin(), other.end()))) {
-            // nothin to assert: size of other cannot exceed capacity
-            // because both vectors have the same type
-            insert(begin(), other.begin(), other.end());
+        template <class _Iter, XSTL_REQUIRES_(is_input_iterator_v<_Iter>)>
+        explicit small_vector(_Iter first, _Iter last, const allocator_type& alloc = allocator_type())
+            : _tpl(std::ignore, alloc) {
+            // Forward using std::is_arithmetic to get to the proper
+            // implementation; this disambiguates between the iterators and
+            // (size_t, value_type) meaning for this constructor.
+            constructImpl(arg1, arg2, std::is_arithmetic<_Iter>());
         }
 
-        /// Move constructor.
-        XSTL_REQUIRES(MoveConstructible<value_type>)
-        constexpr small_vector(small_vector&& other) noexcept(noexcept(move_insert(begin(), other.begin(), other.end()))) {
-            // nothin to assert: size of other cannot exceed capacity
-            // because both vectors have the same type
-            move_insert(begin(), other.begin(), other.end());
+        ~small_vector() {
+            for (auto& t : *this) {
+                (&t)->~value_type();
+            }
+            _Get_val().free_all(_Getal());
         }
 
-        /// Copy assignment.
-        XSTL_REQUIRES(Assignable<reference, const_reference>)
-        constexpr small_vector& operator=(small_vector const& other) noexcept(
-            noexcept(clear()) && noexcept(insert(begin(), other.begin(), other.end()))) {
-            // nothin to assert: size of other cannot exceed capacity
-            // because both vectors have the same type
-            clear();
-            insert(this->begin(), other.begin(), other.end());
+        small_vector& operator=(small_vector const& o) {
+            if (FOLLY_LIKELY(this != &o)) {
+                if (is_trivially_inline_copyable && !this->is_extern() && !o.is_extern()) {
+                    copyInlineTrivial<Value>(o);
+                }
+                else if (o.size() < capacity()) {
+                    const size_t oSize = o.size();
+                    detail::partiallyUninitializedCopy(o.begin(), oSize, begin(), size());
+                    this->set_size(oSize);
+                }
+                else {
+                    assign(o.begin(), o.end());
+                }
+            }
             return *this;
         }
 
-        /// Move assignment.
-        XSTL_REQUIRES(Assignable<reference, reference>)
-        constexpr small_vector& operator=(small_vector&& other) noexcept(
-            noexcept(clear()) and noexcept(move_insert(begin(), other.begin(), other.end()))) {
-            // nothin to assert: size of other cannot exceed capacity
-            // because both vectors have the same type
-            clear();
-            move_insert(this->begin(), other.begin(), other.end());
+        small_vector& operator=(small_vector&& o) noexcept(std::is_nothrow_move_constructible<Value>::value) {
+            if (FOLLY_LIKELY(this != &o)) {
+                // If either is external, reduce to the default-constructed case for this,
+                // since there is nothing that we can move in-place.
+                if (this->is_extern() || o.is_extern()) {
+                    reset();
+                }
+
+                if (!o.is_extern()) {
+                    if (is_trivially_inline_copyable) {
+                        copyInlineTrivial<Value>(o);
+                        o.resetSizePolicy();
+                    }
+                    else {
+                        const size_t oSize = o.size();
+                        detail::partiallyUninitializedCopy(std::make_move_iterator(o.u.buffer()), oSize, this->u.buffer(),
+                                                           size());
+                        this->set_size(oSize);
+                        o.clear();
+                    }
+                }
+                else {
+                    this->u._pdata._heap = o.u._pdata._heap;
+                    o.u._pdata._heap     = nullptr;
+                    // this was already reset above, so it's empty and internal.
+                    this->swapSizePolicy(o);
+                    if (kHasInlineCapacity) {
+                        this->u.set_capacity(o.u.capacity());
+                    }
+                }
+            }
             return *this;
         }
 
-        /// Initializes vector with \p n default-constructed elements.
-        XSTL_REQUIRES(CopyConstructible<T> or MoveConstructible<T>)
-        explicit constexpr small_vector(size_type n) noexcept(noexcept(emplace_n(n))) {
-            XSTL_EXPECT(n <= capacity() && "size exceeds capacity");
-            emplace_n(n);
+        bool operator==(small_vector const& o) const { return size() == o.size() && std::equal(begin(), end(), o.begin()); }
+
+        bool operator<(small_vector const& o) const { return std::lexicographical_compare(begin(), end(), o.begin(), o.end()); }
+
+        XSTL_NODISCARD constexpr size_type max_size() const noexcept {
+            if constexpr (_Base::should_use_heap)
+                return (std::min)(_Get_val().max_size(),
+                                  (std::min)(static_cast<size_type>((std::numeric_limits<difference_type>::max)()),
+                                             _Alloc_traits::max_size(_Getal())));
+            else
+                return static_cast<size_type>(_Base::max_inline);
         }
 
-        /// Initializes vector with \p n with \p value.
-        XSTL_REQUIRES(CopyConstructible<T>)
-        constexpr small_vector(size_type n, T const& value) noexcept(noexcept(insert(begin(), n, value))) {
-            XSTL_EXPECT(n <= capacity() && "size exceeds capacity");
-            insert(begin(), n, value);
-        }
+        allocator_type get_allocator() const noexcept { return _Getal(); }
 
-        /// Initialize vector from range [first, last).
-        template <class InputIt, XSTL_REQUIRES_(InputIterator<InputIt>)>
-        constexpr small_vector(InputIt first, InputIt last) {
-            if constexpr (random_access_iterator_v<InputIt>) {
-                XSTL_EXPECT(last - first >= 0);
-                XSTL_EXPECT(static_cast<size_type>(last - first) <= capacity() && "range size exceeds capacity");
+        size_type size() const noexcept { return _Get_val().size(); }
+        bool      empty() const noexcept { return !size(); }
+
+        iterator       begin() { return data(); }
+        iterator       end() { return data() + size(); }
+        const_iterator begin() const { return data(); }
+        const_iterator end() const { return data() + size(); }
+        const_iterator cbegin() const { return begin(); }
+        const_iterator cend() const { return end(); }
+
+        reverse_iterator rbegin() { return reverse_iterator(end()); }
+        reverse_iterator rend() { return reverse_iterator(begin()); }
+
+        const_reverse_iterator rbegin() const { return const_reverse_iterator(end()); }
+
+        const_reverse_iterator rend() const { return const_reverse_iterator(begin()); }
+
+        const_reverse_iterator crbegin() const { return rbegin(); }
+        const_reverse_iterator crend() const { return rend(); }
+
+        /*
+         * Usually one of the simplest functions in a Container-like class
+         * but a bit more complex here.  We have to handle all combinations
+         * of in-place vs. heap between this and o.
+         */
+        void swap(small_vector& right) noexcept(
+            std::is_nothrow_move_constructible_v<value_type>&& is_nothrow_swappable_v<value_type>) {
+            using std::swap;  // Allow ADL on swap for our value_type.
+            _Scary_val& _val = _Get_val();
+            if (!_val.is_data_inline() && !right._Get_val().is_data_inline())
+                _val.swap_with_extern(right._Get_val());
+            else if (!this->is_extern() && !right.is_extern()) {
+                auto& oldSmall = size() < right.size() ? *this : right;
+                auto& oldLarge = size() < right.size() ? right : *this;
+
+                for (size_type i = 0; i < oldSmall.size(); ++i) {
+                    swap(oldSmall[i], oldLarge[i]);
+                }
+
+                size_type       i  = oldSmall.size();
+                const size_type ci = i;
+                {
+                    auto _guard = scoped_guard([&] {
+                        oldSmall.set_size(i);
+                        for (; i < oldLarge.size(); ++i) {
+                            oldLarge[i].~value_type();
+                        }
+                        oldLarge.set_size(ci);
+                    });
+                    for (; i < oldLarge.size(); ++i) {
+                        auto addr = oldSmall.begin() + i;
+                        new (addr) value_type(std::move(oldLarge[i]));
+                        oldLarge[i].~value_type();
+                    }
+                    _guard.dismiss();
+                }
+                oldSmall.set_size(i);
+                oldLarge.set_size(ci);
+                return;
             }
+
+            // is_extern != right.is_extern()
+            auto& oldExtern = right.is_extern() ? right : *this;
+            auto& oldIntern = right.is_extern() ? *this : right;
+
+            auto oldExternCapacity = oldExtern.capacity();
+            auto oldExternHeap     = oldExtern.u._pdata._heap;
+
+            auto      buff = oldExtern.u.buffer();
+            size_type i    = 0;
+            {
+                auto _guard = scoped_guard([&] {
+                    for (size_type kill = 0; kill < i; ++kill) {
+                        buff[kill].~value_type();
+                    }
+                    for (; i < oldIntern.size(); ++i) {
+                        oldIntern[i].~value_type();
+                    }
+                    oldIntern.resetSizePolicy();
+                    oldExtern.u._pdata._heap = oldExternHeap;
+                    oldExtern.set_capacity(oldExternCapacity);
+                });
+                for (; i < oldIntern.size(); ++i) {
+                    new (&buff[i]) value_type(std::move(oldIntern[i]));
+                    oldIntern[i].~value_type();
+                }
+                _guard.dismiss();
+            }
+            oldIntern.u._pdata._heap = oldExternHeap;
+            this->swapSizePolicy(right);
+            oldIntern.set_capacity(oldExternCapacity);
+        }
+
+        void resize(size_type sz) {
+            if (sz <= size()) {
+                downsize(sz);
+                return;
+            }
+            auto extra = sz - size();
+            _Allocate_for(sz);
+            detail::populateMemForward(begin() + size(), extra, [&](void* p) { new (p) value_type(); });
+            this->incrementSize(extra);
+        }
+
+        void resize(size_type sz, value_type const& v) {
+            if (sz < size()) {
+                erase(begin() + sz, end());
+                return;
+            }
+            auto extra = sz - size();
+            _Allocate_for(sz);
+            detail::populateMemForward(begin() + size(), extra, [&](void* p) { new (p) value_type(v); });
+            this->incrementSize(extra);
+        }
+
+        pointer data() noexcept { return _Get_val().is_data_inline() ? _Get_val().buffer() : _Get_val().heap(); }
+
+        const_pointer data() const noexcept { return const_cast<_Self*>(this)->data(); }
+
+        template <class... Args>
+        iterator emplace(const_iterator p, Args&&... args) {
+            if (p == cend()) {
+                emplace_back(std::forward<Args>(args)...);
+                return end() - 1;
+            }
+
+            /*
+             * We implement emplace at places other than at the back with a
+             * temporary for exception safety reasons.  It is possible to
+             * avoid having to do this, but it becomes hard to maintain the
+             * basic exception safety guarantee (unless you respond to a copy
+             * constructor throwing by clearing the whole vector).
+             *
+             * The reason for this is that otherwise you have to destruct an
+             * element before constructing this one in its place---if the
+             * constructor throws, you either need a nothrow default
+             * constructor or a nothrow copy/move to get something back in the
+             * "gap", and the vector requirements don't guarantee we have any
+             * of these.  Clearing the whole vector is a legal response in
+             * this situation, but it seems like this implementation is easy
+             * enough and probably better.
+             */
+            return insert(p, value_type(std::forward<Args>(args)...));
+        }
+
+        void reserve(size_type sz) { _Allocate_for(sz); }
+
+        size_type capacity() const noexcept { return _Get_val().is_data_inline() ? _Base::max_inline : _Get_val().capacity(); }
+
+        void shrink_to_fit() {
+            if (!_Get_val().is_data_inline())
+                small_vector(begin(), end()).swap(*this);
+        }
+
+        template <class... Args>
+        reference emplace_back(Args&&... args) {
+            auto _isize = this->getInternalSize();
+            if (_isize < max_inline) {
+                new (u.buffer() + _isize) value_type(std::forward<Args>(args)...);
+                this->incrementSize(1);
+                return *(u.buffer() + _isize);
+            }
+            if (!BaseType::kShouldUseHeap) {
+                throw_exception<std::length_error>("max_size exceeded in small_vector");
+            }
+            auto _size     = size();
+            auto _capacity = capacity();
+            if (_capacity == _size) {
+                // Any of args may be references into the vector.
+                // When we are reallocating, we have to be careful to construct the new
+                // element before modifying the data in the old buffer.
+                _Allocate_for(
+                    _size + 1, [&](void* p) { new (p) value_type(std::forward<Args>(args)...); }, _size);
+            }
+            else {
+                // We know the vector is stored in the heap.
+                new (u.heap() + _size) value_type(std::forward<Args>(args)...);
+            }
+            this->incrementSize(1);
+            return *(u.heap() + _size);
+        }
+
+        void push_back(value_type&& t) { emplace_back(std::move(t)); }
+
+        void push_back(const_reference t) { emplace_back(t); }
+
+        void pop_back() {
+            // ideally this would be implemented in terms of erase(end() - 1) to reuse
+            // the higher-level abstraction, but neither Clang or GCC are able to
+            // optimize it away. if you change this, please verify (with disassembly)
+            // that the generated code on -O3 (and ideally -O2) stays short
+            downsize(size() - 1);
+        }
+
+        iterator insert(const_iterator constp, value_type&& t) {
+            iterator p = unconst(constp);
+            if (p == end()) {
+                push_back(std::move(t));
+                return end() - 1;
+            }
+
+            auto offset = p - begin();
+            auto _size  = size();
+            if (capacity() == _size) {
+                _Allocate_for(
+                    _size + 1, [&t](void* ptr) { new (ptr) value_type(std::move(t)); }, offset);
+                this->incrementSize(1);
+            }
+            else {
+                detail::moveObjectsRightAndCreate(data() + offset, data() + _size, data() + _size + 1,
+                                                  [&]() mutable -> value_type&& { return std::move(t); });
+                this->incrementSize(1);
+            }
+            return begin() + offset;
+        }
+
+        iterator insert(const_iterator p, value_type const& t) {
+            // Make a copy and forward to the rvalue value_type&& overload
+            // above.
+            return insert(p, value_type(t));
+        }
+
+        iterator insert(const_iterator pos, size_type n, value_type const& val) {
+            auto offset = pos - begin();
+            auto _size  = size();
+            _Allocate_for(_size + n);
+            detail::moveObjectsRightAndCreate(data() + offset, data() + _size, data() + _size + n,
+                                              [&]() mutable -> value_type const& { return val; });
+            this->incrementSize(n);
+            return begin() + offset;
+        }
+
+        template <class Arg>
+        iterator insert(const_iterator p, Arg arg1, Arg arg2) {
+            // Forward using std::is_arithmetic to get to the proper
+            // implementation; this disambiguates between the iterators and
+            // (size_t, value_type) meaning for this function.
+            return insertImpl(unconst(p), arg1, arg2, std::is_arithmetic<Arg>());
+        }
+
+        iterator insert(const_iterator p, std::initializer_list<value_type> il) { return insert(p, il.begin(), il.end()); }
+
+        iterator erase(const_iterator q) {
+            // ideally this would be implemented in terms of erase(q, q + 1) to reuse
+            // the higher-level abstraction, but neither Clang or GCC are able to
+            // optimize it away. if you change this, please verify (with disassembly)
+            // that the generated code on -O3 (and ideally -O2) stays short
+            std::move(unconst(q) + 1, end(), unconst(q));
+            downsize(size() - 1);
+            return unconst(q);
+        }
+
+        iterator erase(const_iterator q1, const_iterator q2) {
+            if (q1 == q2) {
+                return unconst(q1);
+            }
+            std::move(unconst(q2), end(), unconst(q1));
+            downsize(size() - std::distance(q1, q2));
+            return unconst(q1);
+        }
+
+        void clear() {
+            // ideally this would be implemented in terms of erase(begin(), end()) to
+            // reuse the higher-level abstraction, but neither Clang or GCC are able to
+            // optimize it away. if you change this, please verify (with disassembly)
+            // that the generated code on -O3 (and ideally -O2) stays short
+            downsize(0);
+        }
+
+        template <class _Iter, XSTL_REQUIRES_(is_input_iterator_v<_Iter>)>
+        void assign(_Iter first, _Iter last) {
+            clear();
             insert(begin(), first, last);
         }
 
-        template <typename U, XSTL_REQUIRES_(Convertible<U, value_type>)>
-        constexpr small_vector(initializer_list<U> il) noexcept(noexcept(base_t(move(il))))
-            : base_t(move(il)) {  // assert happens in base_t constructor
+        void assign(std::initializer_list<value_type> il) { assign(il.begin(), il.end()); }
+
+        void assign(size_type n, const value_type& t) {
+            clear();
+            insert(end(), n, t);
         }
 
-        template <class InputIt, XSTL_REQUIRES_(InputIterator<InputIt>)>
-        constexpr void assign(InputIt first,
-                              InputIt last) noexcept(noexcept(clear()) and noexcept(insert(begin(), first, last))) {
-            if constexpr (random_access_iterator_v<InputIt>) {
-                XSTL_EXPECT(last - first >= 0);
-                XSTL_EXPECT(static_cast<size_type>(last - first) <= capacity() && "range size exceeds capacity");
+        XSTL_NODISCARD reference front() noexcept {
+            XSTL_EXPECT(!empty(), "front() called on empty small_vector");
+            return *begin();
+        }
+        XSTL_NODISCARD reference back() noexcept {
+            XSTL_EXPECT(!empty(), "back() called on empty small_vector");
+            return *(end() - 1);
+        }
+        XSTL_NODISCARD const_reference front() const noexcept {
+            XSTL_EXPECT(!empty(), "front() called on empty small_vector");
+            return *begin();
+        }
+        XSTL_NODISCARD const_reference back() const noexcept {
+            XSTL_EXPECT(!empty(), "back() called on empty small_vector");
+            return *(end() - 1);
+        }
+
+        XSTL_NODISCARD reference operator[](size_type i) noexcept {
+            XSTL_EXPECT(i < size(), "small_vector subscript out of range");
+            return *(data() + i);
+        }
+
+        XSTL_NODISCARD const_reference operator[](size_type i) const noexcept {
+            XSTL_EXPECT(i < size(), "small_vector subscript out of range");
+            return *(data() + i);
+        }
+
+        XSTL_NODISCARD reference at(size_type i) {
+            if (i >= size())
+                throw std::out_of_range("index out of range");
+            return *(data() + i);
+        }
+
+        XSTL_NODISCARD const_reference at(size_type i) const {
+            if (i >= size())
+                throw std::out_of_range("index out of range");
+            return *(data() + i);
+        }
+
+    private:
+        static iterator unconst(const_iterator it) { return const_cast<iterator>(it); }
+
+        void downsize(size_type sz) {
+            assert(sz <= size());
+            for (auto it = (begin() + sz), e = end(); it != e; ++it) {
+                it->~value_type();
             }
-            clear();
-            insert(begin(), first, last);
+            this->set_size(sz);
         }
 
-        XSTL_REQUIRES(CopyConstructible<T>)
-        constexpr void assign(size_type n, const T& u) {
-            XSTL_EXPECT(n <= capacity() && "size exceeds capacity");
+        void reset() {
             clear();
-            insert(begin(), n, u);
-        }
-        XSTL_REQUIRES(CopyConstructible<T>)
-        constexpr void assign(initializer_list<T> const& il) {
-            XSTL_EXPECT(il.size() <= capacity() && "initializer_list size exceeds capacity");
-            clear();
-            insert(this->begin(), il.begin(), il.end());
-        }
-        XSTL_REQUIRES(CopyConstructible<T>)
-        constexpr void assign(initializer_list<T>&& il) {
-            XSTL_EXPECT(il.size() <= capacity() && "initializer_list size exceeds capacity");
-            clear();
-            insert(this->begin(), il.begin(), il.end());
+            _Get_val().free_all(_Getal());
+            this->resetSizePolicy();
         }
 
-        ///@}  // Construct/copy/move/destroy/assign
+        // The std::false_type argument is part of disambiguating the
+        // iterator insert functions from integral types (see insert().)
+        template <class It>
+        iterator insertImpl(iterator pos, It first, It last, std::false_type) {
+            if (first == last) {
+                return pos;
+            }
+            using categ  = typename std::iterator_traits<It>::iterator_category;
+            using it_ref = typename std::iterator_traits<It>::reference;
+            if (std::is_same<categ, std::input_iterator_tag>::value) {
+                auto offset = pos - begin();
+                while (first != last) {
+                    pos = insert(pos, *first++);
+                    ++pos;
+                }
+                return begin() + offset;
+            }
+
+            auto const distance = std::distance(first, last);
+            auto const offset   = pos - begin();
+            auto       _size    = size();
+            assert(distance >= 0);
+            assert(offset >= 0);
+            _Allocate_for(_size + distance);
+            detail::moveObjectsRightAndCreate(data() + offset, data() + _size, data() + _size + distance,
+                                              [&, in = last]() mutable -> it_ref { return *--in; });
+            this->incrementSize(distance);
+            return begin() + offset;
+        }
+
+        iterator insertImpl(iterator pos, size_type n, const value_type& val, std::true_type) {
+            // The true_type means this should call the size_t,value_type
+            // overload.  (See insert().)
+            return insert(pos, n, val);
+        }
+
+        // The std::false_type argument came from std::is_arithmetic as part
+        // of disambiguating an overload (see the comment in the
+        // constructor).
+        template <class It>
+        void constructImpl(It first, It last, std::false_type) {
+            typedef typename std::iterator_traits<It>::iterator_category categ;
+            if (std::is_same<categ, std::input_iterator_tag>::value) {
+                // With iterators that only allow a single pass, we can't really
+                // do anything sane here.
+                while (first != last) {
+                    emplace_back(*first++);
+                }
+                return;
+            }
+            size_type distance = std::distance(first, last);
+            if (distance <= max_inline) {
+                this->incrementSize(distance);
+                detail::populateMemForward(u.buffer(), distance, [&](void* p) { new (p) value_type(*first++); });
+                return;
+            }
+            _Allocate_for(distance);
+            this->incrementSize(distance);
+            {
+                auto _guard = scoped_guard([&] { _Get_val().free_all(_Getal()); });
+                detail::populateMemForward(u.heap(), distance, [&](void* p) { new (p) value_type(*first++); });
+                _guard.dismiss();
+            }
+        }
+
+        template <typename InitFunc>
+        void doConstruct(size_type n, InitFunc&& func) {
+            _Allocate_for(n);
+            assert(size() == 0);
+            this->incrementSize(n);
+            {
+                auto _guard = scoped_guard([&] { _Get_val().free_all(_Getal()); });
+                detail::populateMemForward(data(), n, std::forward<InitFunc>(func));
+                _guard.dismiss();
+            }
+        }
+
+        // The true_type means we should forward to the size_t,value_type
+        // overload.
+        void constructImpl(size_type n, value_type const& val, std::true_type) {
+            doConstruct(n, [&](void* p) { new (p) value_type(val); });
+        }
+
+        /*
+         * Compute the size after growth.
+         */
+        size_type computeNewSize() const { return std::min((3 * capacity()) / 2 + 1, max_size()); }
+
+        void _Allocate_for(size_type newSize) {
+            if (newSize <= capacity()) {
+                return;
+            }
+            makeSizeInternal(
+                newSize, false, [](void*) { assume_unreachable(); }, 0);
+        }
+
+        template <typename EmplaceFunc>
+        void _Allocate_for(size_type newSize, EmplaceFunc&& emplaceFunc, size_type pos) {
+            assert(size() == capacity());
+            makeSizeInternal(newSize, true, std::forward<EmplaceFunc>(emplaceFunc), pos);
+        }
+
+        /*
+         * Ensure we have a large enough memory region to be size `newSize'.
+         * Will move/copy elements if we are spilling to heap_ or needed to
+         * allocate a new region, but if resized in place doesn't initialize
+         * anything in the new region.  In any case doesn't change size().
+         * Supports insertion of new element during reallocation by given
+         * pointer to new element and position of new element.
+         * NOTE: If reallocation is not needed, insert must be false,
+         * because we only know how to emplace elements into new memory.
+         */
+        template <typename EmplaceFunc>
+        void makeSizeInternal(size_type newSize, bool insert, EmplaceFunc&& emplaceFunc, size_type pos) {
+            if (newSize > max_size()) {
+                throw std::length_error("max_size exceeded in small_vector");
+            }
+            assert(this->kShouldUseHeap);
+            // This branch isn't needed for correctness, but allows the optimizer to
+            // skip generating code for the rest of this function in in-situ-only
+            // small_vectors.
+            if (!this->kShouldUseHeap) {
+                return;
+            }
+
+            newSize = std::max(newSize, computeNewSize());
+
+            const auto needBytes = newSize * sizeof(value_type);
+            // If the capacity isn't explicitly stored inline, but the heap
+            // allocation is grown to over some threshold, we should store
+            // a capacity at the front of the heap allocation.
+            const bool   heapifyCapacity           = !kHasInlineCapacity && needBytes >= kHeapifyCapacityThreshold;
+            const size_t allocationExtraBytes      = heapifyCapacity ? kHeapifyCapacitySize : 0;
+            const size_t goodAllocationSizeBytes   = goodMallocSize(needBytes + allocationExtraBytes);
+            const size_t goodAllocationNewCapacity = (goodAllocationSizeBytes - allocationExtraBytes) / sizeof(value_type);
+            const size_t newCapacity               = std::min(goodAllocationNewCapacity, max_size());
+            // Make sure that the allocation request has a size computable from the
+            // capacity, instead of using goodAllocationSizeBytes, so that we can do
+            // sized deallocation. If goodMallocSize() gives us extra bytes that are not
+            // a multiple of the value size we cannot use them anyway.
+            const size_t sizeBytes = newCapacity * sizeof(value_type) + allocationExtraBytes;
+            void*        newh      = checkedMalloc(sizeBytes);
+            value_type*  newp =
+                static_cast<value_type*>(heapifyCapacity ? detail::shiftPointer(newh, kHeapifyCapacitySize) : newh);
+
+            {
+                auto _guard = scoped_guard([&] {  //
+                    sizedFree(newh, sizeBytes);
+                });
+                if (insert) {
+                    // move and insert the new element
+                    this->moveToUninitializedEmplace(begin(), end(), newp, pos, std::forward<EmplaceFunc>(emplaceFunc));
+                }
+                else {
+                    // move without inserting new element
+                    if (data()) {
+                        this->moveToUninitialized(begin(), end(), newp);
+                    }
+                }
+                _guard.dismiss();
+            }
+            _Scary_val& _val = _Get_val();
+            auto&       _al  = _Getal();
+            _val.destroy() _val.free_all(_al);
+
+            // Store shifted pointer if capacity is heapified
+            u.pdata_.heap_ = newp;
+            this->set_heapified_capacity(heapifyCapacity);
+            this->set_extern(true);
+            this->set_capacity(newCapacity);
+        }
+
+        /*
+         * This will set the capacity field, stored inline in the storage_ field
+         * if there is sufficient room to store it.
+         */
+        void set_capacity(size_type newCapacity) {
+            assert(this->is_extern());
+            if (hasCapacity()) {
+                assert(newCapacity < std::numeric_limits<InternalSizeType>::max());
+                u.set_capacity(newCapacity);
+            }
+        }
+
+    private:
+        _Scary_val&           _Get_val() noexcept { return std::get<0>(_tpl); }
+        const _Scary_val&     _Get_val() const noexcept { return std::get<0>(_tpl); }
+        allocator_type&       _Getal() noexcept { return std::get<1>(_tpl); }
+        const allocator_type& _Getal() const noexcept { return std::get<1>(_tpl); }
+
+        iterator _Make_iter(pointer ptr) const noexcept {
+            return iterator(ptr, std::addressof(_Get_val());
+        }
+        const_iterator _Make_citer(pointer ptr) const noexcept {
+            return const_iterator(ptr, std::addressof(_Get_val());
+        }
+        _Unchecked_const_iterator _Make_unchecked_citer(pointer ptr) const noexcept { return; }
+
+        _Unchecked_iterator       _Unchecked_begin() noexcept { return _Unchecked_iterator(data(), std::addressof(_Get_val())); }
+        _Unchecked_iterator       _Unchecked_end() noexcept { return _Unchecked_begin() + static_cast<difference_type>(size()); }
+        _Unchecked_const_iterator _Unchecked_begin() const noexcept {
+            return _Unchecked_const_iterator(data(), std::addressof(_Get_val()));
+        }
+        _Unchecked_const_iterator _Unchecked_end() const noexcept {
+            return _Unchecked_begin() + static_cast<difference_type>(size());
+        }
+
+        compressed_tuple<_Scary_val, allocator_type> _tpl;
     };
 
-    template <class _Iter, size_t Capacity>
-    constexpr bool operator==(small_vector<T, Capacity> const& a, small_vector<T, Capacity> const& b) noexcept {
-        return a.size() == b.size() and cmp(a.begin(), a.end(), b.begin(), b.end(), equal_to<>{});
-    }
-
-    template <class _Iter, size_t Capacity>
-    constexpr bool operator<(small_vector<T, Capacity> const& a, small_vector<T, Capacity> const& b) noexcept {
-        return cmp(a.begin(), a.end(), b.begin(), b.end(), less<>{});
-    }
-
-    template <class _Iter, size_t Capacity>
-    constexpr bool operator!=(small_vector<T, Capacity> const& a, small_vector<T, Capacity> const& b) noexcept {
-        return not(a == b);
-    }
-
-    template <class _Iter, size_t Capacity>
-    constexpr bool operator<=(small_vector<T, Capacity> const& a, small_vector<T, Capacity> const& b) noexcept {
-        return cmp(a.begin(), a.end(), b.begin(), b.end(), less_equal<>{});
-    }
-
-    template <class _Iter, size_t Capacity>
-    constexpr bool operator>(small_vector<T, Capacity> const& a, small_vector<T, Capacity> const& b) noexcept {
-        return cmp(a.begin(), a.end(), b.begin(), b.end(), greater<>{});
-    }
-
-    template <class _Iter, size_t Capacity>
-    constexpr bool operator>=(small_vector<T, Capacity> const& a, small_vector<T, Capacity> const& b) noexcept {
-        return cmp(a.begin(), a.end(), b.begin(), b.end(), greater_equal<>{});
-    }
-
 }  // namespace xstl
+#endif

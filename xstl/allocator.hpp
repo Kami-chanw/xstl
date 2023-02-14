@@ -19,30 +19,30 @@
 #include <new>
 #include <type_traits>
 
-#define _ALIGN_SZ_ 8 /* the size of a memory chunk */
-#define _LIST_SZ_ 16 /* the size of free_list */
-#define _UNIQUE_INST(_Tp) (sizeof(_Tp) + _ALIGN_SZ_ - 1) & ~(_ALIGN_SZ_ - 1)
+#define ALIGN_SZ 8 /* the size of a memory chunk */
+#define LIST_SZ 16 /* the size of free_list */
+#define UNIQUE_INST(_Tp) (sizeof(_Tp) + ALIGN_SZ - 1) & ~(ALIGN_SZ - 1)
 
 /**
  *	@brief appoints underlying allocator
  */
-#ifdef _STD_ALLOC_
-#define _DEFAULT_ALLOC(_Tp) std::allocator<_Tp>
-#elif defined(_MALLOC_ALLOC_)
-#define _DEFAULT_ALLOC(_Tp) xstl::alloc_wrapper<_Tp, xstl::malloc_alloc<0>>
-#elif defined(_UNIQUE_ALLOC_)
-#define _DEFAULT_ALLOC(_Tp) xstl::alloc_wrapper<_Tp, xstl::unique_alloc<_UNIQUE_INST(_Tp)>>
+#ifdef STD_ALLOC
+#define DEFAULT_ALLOC(_Tp) std::allocator<_Tp>
+#elif defined(MALLOC_ALLOC)
+#define DEFAULT_ALLOC(_Tp) xstl::alloc_wrapper<_Tp, xstl::malloc_alloc<0>>
+#elif defined(UNIQUE_ALLOC)
+#define DEFAULT_ALLOC(_Tp) xstl::alloc_wrapper<_Tp, xstl::unique_alloc<UNIQUE_INST(_Tp)>>
 #else
-#define _DEFAULT_ALLOC(_Tp) xstl::alloc_wrapper<_Tp, xstl::defualt_alloc<0>>
+#define DEFAULT_ALLOC(_Tp) xstl::alloc_wrapper<_Tp, xstl::defualt_alloc<0>>
 #endif
 
 /**
  *	@brief confirm whether needs to use muti-threads
  */
-#if !defined(_NO_THREADS_) || defined(_USE_THREADS_)
-#define _USE_THREADS_ true
+#if !defined(NO_THREADS) || defined(USE_THREADS)
+#define USE_THREADS true
 #else
-#define _USE_THREADS_ false
+#define USE_THREADS false
 #endif
 
 namespace xstl {
@@ -60,7 +60,7 @@ namespace xstl {
         /**
          *	@brief the size of every memory block in the free list.
          */
-        enum : size_t { ALIGN = _ALIGN_SZ_ };
+        enum : size_t { ALIGN = ALIGN_SZ };
         using block_ptr = block_t*;
 
         static inline constexpr size_t round_up(size_t n, size_t mask = ALIGN) { return (n + mask - 1) & ~(mask - 1); }
@@ -73,10 +73,10 @@ namespace xstl {
     template <int _Inst>
     class malloc_alloc : private allocator_base {
     public:
-        [[nodiscard]] static void* allocate(size_t n);
-        static void                deallocate(void* ptr, size_t);
-        [[nodiscard]] static void* reallocate(void* ptr, size_t oldsz, size_t newsz);
-        [[nodiscard]] static void (*set_malloc_handler(void (*new_handler)()))();
+        static void* allocate(size_t n);
+        static void  deallocate(void* ptr, size_t);
+        static void* reallocate(void* ptr, size_t oldsz, size_t newsz);
+        static void (*set_malloc_handler(void (*new_handler)()))();
 
     private:
         static void (*_malloc_alloc_oom_handler)();
@@ -149,20 +149,19 @@ namespace xstl {
      *	@class defualt_alloc
      *	@brief allocates small memory by memory pool
      */
-    template <int _Inst, bool _Threads = _USE_THREADS_>
+    template <int _Inst, bool _Threads = USE_THREADS>
     class defualt_alloc : private allocator_base {
         using par_alloc = malloc_alloc<_Inst>;
         using _Base     = allocator_base;
         using _Base::ALIGN;
         using _Base::block_ptr;
         using _Base::round_up;
-        enum : size_t { LIST_SZ = _LIST_SZ_ };
         enum : size_t { MAX_SZ = LIST_SZ * ALIGN };
 
     public:
-        [[nodiscard]] static void* allocate(size_t n);
-        static void                deallocate(void* ptr, size_t n);
-        [[nodiscard]] static void* reallocate(void* ptr, size_t oldsz, size_t newsz);
+        static void* allocate(size_t n);
+        static void  deallocate(void* ptr, size_t n);
+        static void* reallocate(void* ptr, size_t oldsz, size_t newsz);
 
     private:
         static char*         _Getchunk(size_t);
@@ -180,7 +179,7 @@ namespace xstl {
         static size_t _pool_sz;
         static list_t _free_list;
 
-#if defined(_USE_THREADS_)
+#if defined(USE_THREADS)
         static std::mutex _mutex;
 #endif
     };
@@ -196,7 +195,7 @@ namespace xstl {
 
     template <int _Inst, bool _Threads>
     size_t defualt_alloc<_Inst, _Threads>::_pool_sz = 0;
-#if defined(_USE_THREADS_)
+#if defined(USE_THREADS)
     template <int _Inst, bool _Threads>
     std::mutex defualt_alloc<_Inst, _Threads>::_mutex;
 #endif
@@ -205,7 +204,7 @@ namespace xstl {
     void* defualt_alloc<_Inst, _Threads>::allocate(size_t n) {
         if (n > MAX_SZ)
             return par_alloc::allocate(n);
-#if defined(_USE_THREADS_)
+#if defined(USE_THREADS)
         if (_Threads)
             std::lock_guard garud(_mutex);
 #endif
@@ -225,7 +224,7 @@ namespace xstl {
         }
         if (ptr == nullptr)
             return;
-#if defined(_USE_THREADS_)
+#if defined(USE_THREADS)
         if (_Threads)
             std::lock_guard garud(_mutex);
 #endif
@@ -292,7 +291,7 @@ namespace xstl {
      *	@class defualt_alloc
      *	@brief allocator for only one class
      */
-    template <int _Inst, bool _Threads = _USE_THREADS_>
+    template <int _Inst, bool _Threads = USE_THREADS>
     class unique_alloc : private allocator_base {
         using par_alloc = malloc_alloc<_Inst>;
         using _Base     = allocator_base;
@@ -300,23 +299,23 @@ namespace xstl {
         using _Base::round_up;
 
     public:
-        [[nodiscard]] static void* allocate(size_t n);
-        static void                deallocate(void* ptr, size_t n);
-        [[nodiscard]] static void* reallocate(void* ptr, size_t oldsz, size_t newsz);
+        static void* allocate(size_t n);
+        static void  deallocate(void* ptr, size_t n);
+        static void* reallocate(void* ptr, size_t oldsz, size_t newsz);
 
     private:
         inline static char* _Make_list(size_t);
         static block_ptr    _free_list_header;
 
         static int _times;
-#if defined(_USE_THREADS_)
+#if defined(USE_THREADS)
         static std::mutex _mutex;
 #endif
     };
 
     template <int _Inst, bool _Threads>
     typename unique_alloc<_Inst, _Threads>::block_ptr unique_alloc<_Inst, _Threads>::_free_list_header = nullptr;
-#if defined(_USE_THREADS_)
+#if defined(USE_THREADS)
     template <int _Inst, bool _Threads>
     std::mutex unique_alloc<_Inst, _Threads>::_mutex;
 #endif
@@ -341,7 +340,7 @@ namespace xstl {
 
     template <int _Inst, bool _Threads>
     void* unique_alloc<_Inst, _Threads>::allocate(size_t n) {
-#if defined(_USE_THREADS_)
+#if defined(USE_THREADS)
         if (_Threads)
             std::lock_guard garud(_mutex);
 #endif
@@ -357,7 +356,7 @@ namespace xstl {
     void unique_alloc<_Inst, _Threads>::deallocate(void* ptr, size_t n) {
         if (ptr == nullptr)
             return;
-#if defined(_USE_THREADS_)
+#if defined(USE_THREADS)
         if (_Threads)
             std::lock_guard garud(_mutex);
 #endif
@@ -375,16 +374,16 @@ namespace xstl {
         return _res;
     }
 
-#ifdef _MALLOC_ALLOC_
+#ifdef MALLOC_ALLOC
     template <int _Inst>
     using alloc = malloc_alloc<_Inst>;
     template <int _Inst>
     using single_thread_alloc = malloc_alloc<_Inst>;
     template <int _Inst>
     using multi_thread_alloc = malloc_alloc<_Inst>;
-#elif defined _UNIQUE_ALLOC_
+#elif defined UNIQUE_ALLOC
     template <class _Tp>
-    using alloc = unique_alloc<(sizeof(_Tp) + 7) & ~7, _USE_THREADS_>;
+    using alloc = unique_alloc<(sizeof(_Tp) + 7) & ~7, USE_THREADS>;
 
     template <class _Tp>
     using single_thread_alloc = defualt_alloc<(sizeof(_Tp) + 7) & ~7, false>;
@@ -393,7 +392,7 @@ namespace xstl {
     using multi_thread_alloc = defualt_alloc<(sizeof(_Tp) + 7) & ~7, true>;
 #else
     template <class _Tp>
-    using alloc = defualt_alloc<0, _USE_THREADS_>;
+    using alloc = defualt_alloc<0, USE_THREADS>;
 
     template <class _Tp>
     using single_thread_alloc = defualt_alloc<0, false>;
@@ -426,8 +425,10 @@ namespace xstl {
         alloc_wrapper(const alloc_wrapper<_OtherTp, _Alloc>&) noexcept {}
         ~alloc_wrapper() noexcept {}
 
-        [[nodiscard]] _Tp* allocate(size_type n, const void* = nullptr) { return n != 0 ? static_cast<_Tp*>(_Alloc::allocate(n * sizeof(_Tp))) : nullptr; }
-        void               deallocate(_Tp* ptr, size_type n) { _Alloc::deallocate(ptr, n * sizeof(_Tp)); }
+        _Tp* allocate(size_type n, const void* = nullptr) {
+            return n != 0 ? static_cast<_Tp*>(_Alloc::allocate(n * sizeof(_Tp))) : nullptr;
+        }
+        void deallocate(_Tp* ptr, size_type n) { _Alloc::deallocate(ptr, n * sizeof(_Tp)); }
     };
 
     template <class _Alloc>
@@ -442,22 +443,11 @@ namespace xstl {
         using is_always_equal                        = std::true_type;
     };
 
-#ifdef _MALLOC_ALLOC
-    template <class _Tp, bool _Threads = _USE_THREADS_>
-    using allocator = alloc_wrapper<_Tp, malloc_alloc<0>>;
-#elif defined _UNIQUE_ALLOC_
-    template <class _Tp, bool _Threads = _USE_THREADS_>
-    using allocator = alloc_wrapper<_Tp, unique_alloc<_UNIQUE_INST(_Tp), _Threads>>;
-#else
-    template <class _Tp, bool _Threads = _USE_THREADS_>
-    using allocator = alloc_wrapper<_Tp, defualt_alloc<0, _Threads>>;
-#endif
-
-    template <class _Tp, bool _Threads = _USE_THREADS_>
+    template <class _Tp, bool _Threads = USE_THREADS>
     using malloc_allocator = alloc_wrapper<_Tp, malloc_alloc<0>>;
-    template <class _Tp, bool _Threads = _USE_THREADS_>
+    template <class _Tp, bool _Threads = USE_THREADS>
     using unique_allocator = alloc_wrapper<_Tp, unique_alloc<(sizeof(_Tp) + 7) & ~7, _Threads>>;
-    template <class _Tp, bool _Threads = _USE_THREADS_>
+    template <class _Tp, bool _Threads = USE_THREADS>
     using default_allocator = alloc_wrapper<_Tp, defualt_alloc<0, _Threads>>;
 
     template <class _Tp, class _Alloc>
@@ -495,7 +485,8 @@ namespace xstl {
     }
 
     template <class _Alloc>
-    inline constexpr bool alloc_pocca_v = std::allocator_traits<_Alloc>::propagate_on_container_copy_assignment::value && !std::allocator_traits<_Alloc>::is_always_equal::value;
+    inline constexpr bool alloc_pocca_v = std::allocator_traits<_Alloc>::propagate_on_container_copy_assignment::value
+                                          && !std::allocator_traits<_Alloc>::is_always_equal::value;
 
     enum class pocma_values {
         IsEqual,      // usually allows contents to be stolen (e.g. with swap)
@@ -504,8 +495,77 @@ namespace xstl {
     };
 
     template <class _Alloc>
-    inline constexpr pocma_values alloc_pocma_v = std::allocator_traits<_Alloc>::is_always_equal::value
-                                                      ? pocma_values::IsEqual
-                                                      : (std::allocator_traits<_Alloc>::propagate_on_container_move_assignment::value ? pocma_values::Propagate : pocma_values::NoPropagate);
+    inline constexpr pocma_values alloc_pocma_v =
+        std::allocator_traits<_Alloc>::is_always_equal::value
+            ? pocma_values::IsEqual
+            : (std::allocator_traits<_Alloc>::propagate_on_container_move_assignment::value ? pocma_values::Propagate
+                                                                                            : pocma_values::NoPropagate);
+
+    template <class _Ty, class... _Args>
+    constexpr void construct_in_place(_Ty& obj, _Args&&... args) noexcept(std::is_nothrow_constructible_v<_Ty, _Args...>) {
+#if __cplusplus >= 202002L
+        if (std::is_constant_evaluated())
+            std::construct_at(std::addressof(obj), std::forward<_Args>(args)...);
+        else
+#endif
+            ::new (const_cast<void*>(static_cast<const volatile void*>(std::addressof(obj)))) _Ty(std::forward<_Args>(args)...);
+    }
+
+    template <class _Ty>
+    constexpr void destroy_in_place(_Ty& obj) noexcept {
+        if constexpr (std::is_array_v<_Ty>) {
+            if constexpr (!std::is_trivially_destructible_v<typename std::iterator_traits<_Ty>::value_type>) {
+                for (auto _first = obj, _last = obj + std::extent_v<_Ty>; _first != _last; ++_first)
+                    destroy_in_place(*_first);
+            }
+        }
+        else
+            obj.~_Ty();
+    }
+
+#if __cplusplus >= 202207L
+    template <std::size_t _Len, std::size_t _Align>
+    struct xstl_aligned_storage_t {
+        alignas(_Align) unsigned char data[_Len];
+    };
+#else
+    template <std::size_t _Len, std::size_t _Align>
+    using xstl_aligned_storage_t = std::aligned_storage_t<_Len, _Align>;
+#endif
+
+    template <class _Tp>
+    using aligned_storage_for_t = xstl_aligned_storage_t<sizeof(_Tp), alignof(_Tp)>;
+
+    template <class _Alloc>
+    using is_default_allocator = std::is_same<std::allocator<typename std::allocator_traits<_Alloc>::value_Type>, _Alloc>;
+
+    template <class _Void, class... _Types>
+    struct has_no_allocator_construct : true_type {};
+
+    _STL_DISABLE_DEPRECATED_WARNING
+    template <class _Alloc, class _Ptr, class... _Args>
+    struct has_no_allocator_construct<
+        std::void_t<decltype(std::declval<_Alloc&>().construct(std::declval<_Ptr>(), std::declval<_Args>()...))>, _Alloc, _Ptr,
+        _Args...> : std::false_type {};
+    _STL_RESTORE_DEPRECATED_WARNING
+
+    template <class _Alloc, class _Ptr, class... _Args>
+    using uses_default_construct =
+        std::disjunction<is_default_allocator<_Alloc>, has_no_allocator_construct<void, _Alloc, _Ptr, _Args...>>;
+
+    template <class _Alloc, class _Ptr, class = void>
+    struct has_no_allocator_destroy : true_type {};
+
+    _STL_DISABLE_DEPRECATED_WARNING
+    template <class _Alloc, class _Ptr>
+    struct has_no_allocator_destroy<_Alloc, _Ptr, void_t<decltype(std::declval<_Alloc&>().destroy(std::declval<_Ptr>()))>>
+        : std::false_type {};
+    _STL_RESTORE_DEPRECATED_WARNING
+
+    template <class _Alloc, class _Ptr>
+    using uses_default_destroy = std::disjunction<is_default_allocator<_Alloc>, has_no_allocator_destroy<_Alloc, _Ptr>>;
+
+    template <class _Alloc, class _Ptr>
+    using uses_default_destroy_t = typename uses_default_destroy<_Alloc, _Ptr>::type;
 }  // namespace xstl
 #endif

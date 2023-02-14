@@ -1,6 +1,6 @@
 #ifndef _BITSTRING_HPP_
 #define _BITSTRING_HPP_
-#include "config.hpp"
+#include "utility.hpp"
 #include <algorithm>
 #include <iterator>
 #include <string>
@@ -58,10 +58,7 @@ namespace xstl {
             flip_bit(value, index);
     }
 
-    template <class _Tp, class... _Types>
-    inline constexpr bool is_any_of_v = std::disjunction_v<std::is_same<_Tp, _Types>...>;
-    template <class _Tp>
-    concept character_type = is_any_of_v<_Tp, char, signed char, unsigned char, wchar_t, char8_t, char16_t, char32_t>;
+
 
     template <class _Block = typename _Bstr_accessor::byte, class _Index>
     inline constexpr _Index to_block_idx(_Index index) {
@@ -198,8 +195,8 @@ namespace xstl {
             friend struct _Bstr_accessor;
 
         public:
-            [[nodiscard]] bool operator==(const const_reference& rhs) const noexcept { return std::addressof(_bstr) == std::addressof(rhs._bstr) && _index == rhs._index; }  // for iterators
-            [[nodiscard]] bool operator!=(const const_reference& rhs) const noexcept { return !(*this == rhs); }
+            XSTL_NODISCARD bool operator==(const const_reference& rhs) const noexcept { return std::addressof(_bstr) == std::addressof(rhs._bstr) && _index == rhs._index; }  // for iterators
+            XSTL_NODISCARD bool operator!=(const const_reference& rhs) const noexcept { return !(*this == rhs); }
 
             operator bool() const { return unchecked_get(_bstr, _index); }
 
@@ -267,27 +264,27 @@ namespace xstl {
             }
         };
 
-        using iterator               = xstl_iterator::rand_iter<reference, _Bstr_pack<_Derived>>;
-        using const_iterator         = xstl_iterator::rand_citer<const_reference, _Bstr_pack<_Derived>>;
+        using iterator               = iter_adapter::rand_iter<reference, _Bstr_pack<_Derived>>;
+        using xstl_const_iterator         = iter_adapter::rand_citer<const_reference, _Bstr_pack<_Derived>>;
         using reverse_iterator       = std::reverse_iterator<iterator>;
-        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+        using const_reverse_iterator = std::reverse_iterator<xstl_const_iterator>;
         using pointer                = iterator;
-        using const_pointer          = const_iterator;
+        using const_pointer          = xstl_const_iterator;
         using buf_type               = std::vector<block_type, _Alloc>;
         static_assert(std::contiguous_iterator<typename buf_type::iterator>, "bitstring requires contiguous memory containers");
 
-        [[nodiscard]] constexpr iterator               begin() noexcept { return iterator(_Bstr_accessor::make_reference(*this, abspos(0)), _Derptr()); }
-        [[nodiscard]] constexpr iterator               end() noexcept { return iterator(_Bstr_accessor::make_reference(*this, abspos(_size)), _Derptr()); }
-        [[nodiscard]] constexpr const_iterator         begin() const noexcept { return const_iterator(_Bstr_accessor::make_const_reference(*this, abspos(0)), _Derptr()); }
-        [[nodiscard]] constexpr const_iterator         end() const noexcept { return const_iterator(_Bstr_accessor::make_const_reference(*this, abspos(_size)), _Derptr()); }
-        [[nodiscard]] constexpr const_iterator         cbegin() const noexcept { return const_iterator(_Bstr_accessor::make_const_reference(*this, abspos(0)), _Derptr()); }
-        [[nodiscard]] constexpr const_iterator         cend() const noexcept { return const_iterator(_Bstr_accessor::make_const_reference(*this, abspos(_size)), _Derptr()); }
-        [[nodiscard]] constexpr reverse_iterator       rbegin() noexcept { return reverse_iterator(end()); }
-        [[nodiscard]] constexpr reverse_iterator       rend() noexcept { return reverse_iterator(begin()); }
-        [[nodiscard]] constexpr const_reverse_iterator rbegin() const noexcept { return const_reverse_iterator(cend()); }
-        [[nodiscard]] constexpr const_reverse_iterator rend() const noexcept { return const_reverse_iterator(cbegin()); }
-        [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept { return const_reverse_iterator(cend()); }
-        [[nodiscard]] constexpr const_reverse_iterator crend() const noexcept { return const_reverse_iterator(cbegin()); }
+        XSTL_NODISCARD constexpr iterator               begin() noexcept { return iterator(_Bstr_accessor::make_reference(*this, abspos(0)), _Derptr()); }
+        XSTL_NODISCARD constexpr iterator               end() noexcept { return iterator(_Bstr_accessor::make_reference(*this, abspos(_size)), _Derptr()); }
+        XSTL_NODISCARD constexpr xstl_const_iterator         begin() const noexcept { return xstl_const_iterator(_Bstr_accessor::make_const_reference(*this, abspos(0)), _Derptr()); }
+        XSTL_NODISCARD constexpr xstl_const_iterator         end() const noexcept { return xstl_const_iterator(_Bstr_accessor::make_const_reference(*this, abspos(_size)), _Derptr()); }
+        XSTL_NODISCARD constexpr xstl_const_iterator         cbegin() const noexcept { return xstl_const_iterator(_Bstr_accessor::make_const_reference(*this, abspos(0)), _Derptr()); }
+        XSTL_NODISCARD constexpr xstl_const_iterator         cend() const noexcept { return xstl_const_iterator(_Bstr_accessor::make_const_reference(*this, abspos(_size)), _Derptr()); }
+        XSTL_NODISCARD constexpr reverse_iterator       rbegin() noexcept { return reverse_iterator(end()); }
+        XSTL_NODISCARD constexpr reverse_iterator       rend() noexcept { return reverse_iterator(begin()); }
+        XSTL_NODISCARD constexpr const_reverse_iterator rbegin() const noexcept { return const_reverse_iterator(cend()); }
+        XSTL_NODISCARD constexpr const_reverse_iterator rend() const noexcept { return const_reverse_iterator(cbegin()); }
+        XSTL_NODISCARD constexpr const_reverse_iterator crbegin() const noexcept { return const_reverse_iterator(cend()); }
+        XSTL_NODISCARD constexpr const_reverse_iterator crend() const noexcept { return const_reverse_iterator(cbegin()); }
 
     protected:
         bitstring_base() = default;
@@ -327,43 +324,43 @@ namespace xstl {
         template <class _Other>
         _Self& subtract_with(const bitstring_base<_Block, _Alloc, _Other>& bstr, size_type index = 0);
 
-        [[nodiscard]] bool      test(size_type index) const;
-        [[nodiscard]] bool      test_set(size_type index, bool value = true);
-        [[nodiscard]] bool      all() const;
-        [[nodiscard]] bool      any() const;
-        [[nodiscard]] bool      none() const { return !all(); }
-        [[nodiscard]] size_type count() const noexcept;
+        XSTL_NODISCARD bool      test(size_type index) const;
+        XSTL_NODISCARD bool      test_set(size_type index, bool value = true);
+        XSTL_NODISCARD bool      all() const;
+        XSTL_NODISCARD bool      any() const;
+        XSTL_NODISCARD bool      none() const { return !all(); }
+        XSTL_NODISCARD size_type count() const noexcept;
 
-        [[nodiscard]] size_type size() const noexcept { return _size; }
-        [[nodiscard]] bool      empty() const noexcept { return _size == 0; }
+        XSTL_NODISCARD size_type size() const noexcept { return _size; }
+        XSTL_NODISCARD bool      empty() const noexcept { return _size == 0; }
 
-        [[nodiscard]] reference       at(size_type index);
-        [[nodiscard]] reference       operator[](size_type index);
-        [[nodiscard]] const_reference at(size_type index) const;
-        [[nodiscard]] const_reference operator[](size_type index) const;
-        [[nodiscard]] _Bstr_ref       at(size_t first, size_t last) { return const_cast<_Self*>(this)->_Derptr()->at(range_index(first, last)); }
-        [[nodiscard]] const _Bstr_ref at(size_t first, size_t last) const { return const_cast<_Self*>(this)->at(first, last); }
-        [[nodiscard]] const _Bstr_ref at(range_index index) const { return const_cast<_Self*>(this)->_Derptr()->at(index); }
-        [[nodiscard]] const _Bstr_ref operator[](range_index index) const { return (*const_cast<_Self*>(this)->_Derptr())[index]; }
+        XSTL_NODISCARD reference       at(size_type index);
+        XSTL_NODISCARD reference       operator[](size_type index);
+        XSTL_NODISCARD const_reference at(size_type index) const;
+        XSTL_NODISCARD const_reference operator[](size_type index) const;
+        XSTL_NODISCARD _Bstr_ref       at(size_t first, size_t last) { return const_cast<_Self*>(this)->_Derptr()->at(range_index(first, last)); }
+        XSTL_NODISCARD const _Bstr_ref at(size_t first, size_t last) const { return const_cast<_Self*>(this)->at(first, last); }
+        XSTL_NODISCARD const _Bstr_ref at(range_index index) const { return const_cast<_Self*>(this)->_Derptr()->at(index); }
+        XSTL_NODISCARD const _Bstr_ref operator[](range_index index) const { return (*const_cast<_Self*>(this)->_Derptr())[index]; }
 
         template <class _String = std::string>
-        [[nodiscard]] _String to_string(typename _String::value_type elem0 = static_cast<typename _String::value_type>('0'),
+        XSTL_NODISCARD _String to_string(typename _String::value_type elem0 = static_cast<typename _String::value_type>('0'),
                                         typename _String::value_type elem1 = static_cast<typename _String::value_type>('1')) const;
         template <class _String = std::string>
         void to_string(_String& str, typename _String::value_type elem0 = static_cast<typename _String::value_type>('0'),
                        typename _String::value_type elem1 = static_cast<typename _String::value_type>('1')) const;
         template <class _Tp>
-        [[nodiscard]] _Tp to_type() const;
+        XSTL_NODISCARD _Tp to_type() const;
         template <class _Tp>
         void to_type(_Tp& value) const;
         template <class _String = std::string>
-        [[nodiscard]] _String to_string(size_type index, size_type n = npos, typename _String::value_type elem0 = static_cast<typename _String::value_type>('0'),
+        XSTL_NODISCARD _String to_string(size_type index, size_type n = npos, typename _String::value_type elem0 = static_cast<typename _String::value_type>('0'),
                                         typename _String::value_type elem1 = static_cast<typename _String::value_type>('1')) const;
         template <class _String = std::string>
         void to_string(_String& str, size_type index, size_type n = npos, typename _String::value_type elem0 = static_cast<typename _String::value_type>('0'),
                        typename _String::value_type elem1 = static_cast<typename _String::value_type>('1')) const;
         template <class _Tp>
-        [[nodiscard]] _Tp to_type(size_type index, size_type n = npos) const;
+        XSTL_NODISCARD _Tp to_type(size_type index, size_type n = npos) const;
         template <class _Tp>
         void to_type(_Tp& value, size_type index, size_type n = npos) const;
 
@@ -414,25 +411,25 @@ namespace xstl {
         }
 
         // bitset operations
-        [[nodiscard]] _Bstr operator~() const { return _Bstr(*this).flip(); }
+        XSTL_NODISCARD _Bstr operator~() const { return _Bstr(*this).flip(); }
         template <class _Other>
-        [[nodiscard]] _Bstr operator&(const bitstring_base<_Block, _Alloc, _Other>& rhs) const {
+        XSTL_NODISCARD _Bstr operator&(const bitstring_base<_Block, _Alloc, _Other>& rhs) const {
             return _Bstr(*this) &= rhs;
         }
         template <class _Other>
-        [[nodiscard]] _Bstr operator^(const bitstring_base<_Block, _Alloc, _Other>& rhs) const {
+        XSTL_NODISCARD _Bstr operator^(const bitstring_base<_Block, _Alloc, _Other>& rhs) const {
             return _Bstr(*this) ^= rhs;
         }
         template <class _Other>
-        [[nodiscard]] _Bstr operator|(const bitstring_base<_Block, _Alloc, _Other>& rhs) const {
+        XSTL_NODISCARD _Bstr operator|(const bitstring_base<_Block, _Alloc, _Other>& rhs) const {
             return _Bstr(*this) |= rhs;
         }
         template <class _Other>
-        [[nodiscard]] _Bstr operator-(const bitstring_base<_Block, _Alloc, _Other>& rhs) const {
+        XSTL_NODISCARD _Bstr operator-(const bitstring_base<_Block, _Alloc, _Other>& rhs) const {
             return _Bstr(*this) -= rhs;
         }
-        [[nodiscard]] _Bstr operator<<(size_type n) const { return _Bstr(*this) <<= n; }
-        [[nodiscard]] _Bstr operator>>(size_type n) const { return _Bstr(*this) >>= n; }
+        XSTL_NODISCARD _Bstr operator<<(size_type n) const { return _Bstr(*this) <<= n; }
+        XSTL_NODISCARD _Bstr operator>>(size_type n) const { return _Bstr(*this) >>= n; }
 
         template <class _Other>
         _Self& operator&=(const bitstring_base<_Block, _Alloc, _Other>& rhs) {
@@ -455,16 +452,16 @@ namespace xstl {
 
         // string operations
         template <class _Other>
-        [[nodiscard]] _Bstr operator+(const bitstring_base<_Block, _Alloc, _Other>& rhs) const {
+        XSTL_NODISCARD _Bstr operator+(const bitstring_base<_Block, _Alloc, _Other>& rhs) const {
             return _Bstr(*this) += rhs;
         }
         template <character_type _Elem>
-        [[nodiscard]] _Bstr operator+(const _Elem* str) const {
+        XSTL_NODISCARD _Bstr operator+(const _Elem* str) const {
             return _Bstr(*this) += str;
         }
 
-        [[nodiscard]] bool                 operator==(const _Self& rhs) const;
-        [[nodiscard]] std::strong_ordering operator<=>(const _Self& rhs) const;
+        XSTL_NODISCARD bool                 operator==(const _Self& rhs) const;
+        XSTL_NODISCARD std::strong_ordering operator<=>(const _Self& rhs) const;
 
         template <class _Elem, class _Traits>
         friend std::basic_ostream<_Elem, _Traits>& operator<<(std::basic_ostream<_Elem, _Traits>& os, const _Self& bstr) {
@@ -1055,7 +1052,7 @@ namespace xstl {
         using reference      = typename _Base::reference;
         using allocator_type = typename _Base::allocator_type;
         using iterator       = typename _Base::iterator;
-        using const_iterator = typename _Base::const_iterator;
+        using xstl_const_iterator = typename _Base::xstl_const_iterator;
 
         /**
          *	@brief Constructs empty bitstring. If no allocator is supplied, allocator is obtained from a default-constructed instance.
@@ -1128,8 +1125,8 @@ namespace xstl {
         basic_bitstring(_Self&& bstr) : _vec(std::move(bstr._vec)), _Base(std::exchange(bstr._size, size_type{ 0 })) {}
         basic_bitstring(_Self&& bstr, const allocator_type& alloc = allocator_type()) : _vec(std::move(bstr._vec), alloc), _Base(std::exchange(bstr._size, size_type{ 0 })) {}
 
-        [[nodiscard]] size_type max_size() const noexcept { return _vec.max_size() * TYPE_BIT(block_type); }
-        [[nodiscard]] size_type capacity() const noexcept { return _vec.size() * TYPE_BIT(block_type) - _size; }
+        XSTL_NODISCARD size_type max_size() const noexcept { return _vec.max_size() * TYPE_BIT(block_type); }
+        XSTL_NODISCARD size_type capacity() const noexcept { return _vec.size() * TYPE_BIT(block_type) - _size; }
         void                    shrink_to_fit() {
             _vec.resize(to_fit_size<block_type>(_size));
             _vec.shrink_to_fit();
@@ -1147,24 +1144,24 @@ namespace xstl {
         _Self& insert(size_type index, const bitstring_base<_Block, _Alloc, _Other>& bstr, typename bitstring_base<_Block, _Alloc, _Other>::size_type bstr_index = 0,
                       typename bitstring_base<_Block, _Alloc, _Other>::size_type bstr_count = npos);
 
-        iterator insert(const_iterator position, bool value) { return insert(position, 1, value); }
-        iterator insert(const_iterator position, size_type n, bool value) {
+        iterator insert(xstl_const_iterator position, bool value) { return insert(position, 1, value); }
+        iterator insert(xstl_const_iterator position, size_type n, bool value) {
             return iterator(_Bstr_accessor::make_reference(insert<std::false_type>(position->_Get_index(), n, value), position->_Get_index()), this);
         }
         template <class _Iter>
-        iterator insert(const_iterator position, _Iter binary_first, _Iter binary_last);
+        iterator insert(xstl_const_iterator position, _Iter binary_first, _Iter binary_last);
 
         template <class _Tp, class _Check = std::true_type>
         iterator insert_type(size_type index, const _Tp& value, size_type n = TYPE_BIT(_Tp));
         template <class _Tp>
-        iterator insert_type(const_iterator position, const _Tp& value, size_type n = TYPE_BIT(_Tp)) {
+        iterator insert_type(xstl_const_iterator position, const _Tp& value, size_type n = TYPE_BIT(_Tp)) {
             return insert_type<_Tp, std::false_type>(position->_Get_index(), value, n);
         }
 
         template <class _Check = std::true_type>
         _Self&   erase(size_type index = 0, size_type n = npos);
-        iterator erase(const_iterator position) { return erase(position, position + 1); }
-        iterator erase(const_iterator first, const_iterator last);
+        iterator erase(xstl_const_iterator position) { return erase(position, position + 1); }
+        iterator erase(xstl_const_iterator first, xstl_const_iterator last);
 
         void resize(size_type new_size, bool value = false);
         void clear() {
@@ -1212,8 +1209,8 @@ namespace xstl {
 
         using _Base::at;
         using _Base::           operator[];
-        [[nodiscard]] _Bstr_ref at(range_index index);
-        [[nodiscard]] _Bstr_ref operator[](range_index index);
+        XSTL_NODISCARD _Bstr_ref at(range_index index);
+        XSTL_NODISCARD _Bstr_ref operator[](range_index index);
 
         void swap(_Self& x);
         void swap(_Bstr_ref& x);
@@ -1383,7 +1380,7 @@ namespace xstl {
 
     template <std::unsigned_integral _Block, class _Alloc>
     template <class _Iter>
-    typename basic_bitstring<_Block, _Alloc>::iterator basic_bitstring<_Block, _Alloc>::insert(const_iterator position, _Iter binary_first, _Iter binary_last) {
+    typename basic_bitstring<_Block, _Alloc>::iterator basic_bitstring<_Block, _Alloc>::insert(xstl_const_iterator position, _Iter binary_first, _Iter binary_last) {
         if (position == _Base::cend()) {
             append(binary_first, binary_last);
             return iterator(_Bstr_accessor::make_reference(*this, position->_Get_index()), this);
@@ -1412,7 +1409,7 @@ namespace xstl {
     }
 
     template <std::unsigned_integral _Block, class _Alloc>
-    typename basic_bitstring<_Block, _Alloc>::iterator basic_bitstring<_Block, _Alloc>::erase(const_iterator first, const_iterator last) {
+    typename basic_bitstring<_Block, _Alloc>::iterator basic_bitstring<_Block, _Alloc>::erase(xstl_const_iterator first, xstl_const_iterator last) {
         const size_type _first = first->_Get_index(), _last = last->_Get_index();
         return iterator(_Bstr_accessor::make_reference(erase<std::false_type>(_first, _last - _first), _last), this);
     }
@@ -1565,7 +1562,7 @@ namespace xstl {
         using buf_type       = typename _Base::buf_type;
         using block_type     = typename _Base::block_type;
         using iterator       = typename _Base::iterator;
-        using const_iterator = typename _Base::const_iterator;
+        using xstl_const_iterator = typename _Base::xstl_const_iterator;
         using reference      = typename _Base::reference;
 
         basic_bitstring_ref(_Bstr& bstr, size_t first, size_t last) : _bstr(bstr), _beg(first), _Base(last - first) {}
@@ -1594,14 +1591,14 @@ namespace xstl {
             return *this;
         }
 
-        iterator insert(const_iterator position, bool value) { return insert(position, 1, value); }
-        iterator insert(const_iterator position, size_type n, bool value) {
+        iterator insert(xstl_const_iterator position, bool value) { return insert(position, 1, value); }
+        iterator insert(xstl_const_iterator position, size_type n, bool value) {
             _bstr.insert<std::false_type>(position->_Get_index(), n, value);
             _size += n;
             return iterator(_Bstr_accessor::make_reference(*this, position->_Get_index()), this);
         }
         template <class _Iter>
-        iterator insert(const_iterator position, _Iter binary_first, _Iter binary_last) {
+        iterator insert(xstl_const_iterator position, _Iter binary_first, _Iter binary_last) {
             _Size_fix_operation([&] { _bstr.insert(_bstr.cbegin() + position->_Get_index(), binary_first, binary_last); });
             return iterator(_Bstr_accessor::make_reference(*this, position->_Get_index()), this);
         }
@@ -1613,7 +1610,7 @@ namespace xstl {
             return iterator(_Bstr_accessor::make_reference(*this, index), this);
         }
         template <class _Tp>
-        iterator insert_type(const_iterator position, const _Tp& value, size_type n = TYPE_BIT(_Tp)) {
+        iterator insert_type(xstl_const_iterator position, const _Tp& value, size_type n = TYPE_BIT(_Tp)) {
             _Size_fix_operation([&] { _bstr.insert_type<_Tp, std::false_type>(position->_Get_index(), value, n); });
             return iterator(_Bstr_accessor::make_reference(*this, position->_Get_index()), this);
         }
@@ -1623,8 +1620,8 @@ namespace xstl {
             _Size_fix_operation([&] { _bstr.erase<std::false_type>(_beg + index, _size - index); });
             return *this;
         }
-        iterator erase(const_iterator position) { return erase(position, position + 1); }
-        iterator erase(const_iterator first, const_iterator last) {
+        iterator erase(xstl_const_iterator position) { return erase(position, position + 1); }
+        iterator erase(xstl_const_iterator first, xstl_const_iterator last) {
             _Size_fix_operation([&] { _bstr.erase(_bstr.cbegin() + first->_Get_index(), _bstr.cbegin() + last->_Get_index()); });
             return iterator(_Bstr_accessor::make_reference(*this, first->_Get_index()), this);
         }
@@ -1693,11 +1690,11 @@ namespace xstl {
 
         using _Base::at;
         using _Base::       operator[];
-        [[nodiscard]] _Self at(range_index index) {
+        XSTL_NODISCARD _Self at(range_index index) {
             check_index(index._first), _Base::check_index_exclusive(index._last);
             return basic_bitstring_ref<_Block, _Alloc>(_bstr, _beg + index._first, _beg + index._last);
         }
-        [[nodiscard]] _Self operator[](range_index index) {
+        XSTL_NODISCARD _Self operator[](range_index index) {
 #if !defined(_NO_BSTRING_SAFETY_VERIFY_) && !defined(_NO_XSTL_SAFATRY_VERIFY_)
             assert(("invalid bitstring subscript", index._first < _size && index._last <= _size));
 #endif
@@ -1757,46 +1754,46 @@ namespace xstl {
 namespace std {
     template <unsigned_integral _Block, class _Alloc>
     struct pointer_traits<
-        xstl::xstl_iterator::rand_iter<typename xstl::bitstring_base<_Block, _Alloc, xstl::basic_bitstring<_Block, _Alloc>>::reference, xstl::_Bstr_pack<xstl::basic_bitstring<_Block, _Alloc>>>> {
+        xstl::iter_adapter::rand_iter<typename xstl::bitstring_base<_Block, _Alloc, xstl::basic_bitstring<_Block, _Alloc>>::reference, xstl::_Bstr_pack<xstl::basic_bitstring<_Block, _Alloc>>>> {
         using _Bstr_base      = xstl::bitstring_base<_Block, _Alloc, xstl::basic_bitstring<_Block, _Alloc>>;
-        using pointer         = xstl::xstl_iterator::rand_iter<typename _Bstr_base::reference, xstl::_Bstr_pack<xstl::basic_bitstring<_Block, _Alloc>>>;
+        using pointer         = xstl::iter_adapter::rand_iter<typename _Bstr_base::reference, xstl::_Bstr_pack<xstl::basic_bitstring<_Block, _Alloc>>>;
         using element_type    = typename _Bstr_base::reference;
         using difference_type = typename _Bstr_base::difference_type;
 
-        [[nodiscard]] static constexpr pointer pointer_to(element_type& value) noexcept { return pointer(value); }
+        XSTL_NODISCARD static constexpr pointer pointer_to(element_type& value) noexcept { return pointer(value); }
     };
 
     template <unsigned_integral _Block, class _Alloc>
-    struct pointer_traits<xstl::xstl_iterator::rand_citer<typename xstl::bitstring_base<_Block, _Alloc, xstl::basic_bitstring<_Block, _Alloc>>::const_reference,
+    struct pointer_traits<xstl::iter_adapter::rand_citer<typename xstl::bitstring_base<_Block, _Alloc, xstl::basic_bitstring<_Block, _Alloc>>::const_reference,
                                                           xstl::_Bstr_pack<xstl::basic_bitstring<_Block, _Alloc>>>> {
         using _Bstr_base      = xstl::bitstring_base<_Block, _Alloc, xstl::basic_bitstring<_Block, _Alloc>>;
-        using pointer         = xstl::xstl_iterator::rand_citer<typename _Bstr_base::const_reference, xstl::_Bstr_pack<xstl::basic_bitstring<_Block, _Alloc>>>;
+        using pointer         = xstl::iter_adapter::rand_citer<typename _Bstr_base::const_reference, xstl::_Bstr_pack<xstl::basic_bitstring<_Block, _Alloc>>>;
         using element_type    = typename _Bstr_base::const_reference;
         using difference_type = typename _Bstr_base::difference_type;
 
-        [[nodiscard]] static constexpr pointer pointer_to(element_type& value) noexcept { return pointer(value); }
+        XSTL_NODISCARD static constexpr pointer pointer_to(element_type& value) noexcept { return pointer(value); }
     };
 
     template <unsigned_integral _Block, class _Alloc>
-    struct pointer_traits<xstl::xstl_iterator::rand_iter<typename xstl::bitstring_base<_Block, _Alloc, xstl::basic_bitstring_ref<_Block, _Alloc>>::reference,
+    struct pointer_traits<xstl::iter_adapter::rand_iter<typename xstl::bitstring_base<_Block, _Alloc, xstl::basic_bitstring_ref<_Block, _Alloc>>::reference,
                                                          xstl::_Bstr_pack<xstl::basic_bitstring_ref<_Block, _Alloc>>>> {
         using _Bstr_base      = xstl::bitstring_base<_Block, _Alloc, xstl::basic_bitstring_ref<_Block, _Alloc>>;
-        using pointer         = xstl::xstl_iterator::rand_iter<typename _Bstr_base::const_reference, xstl::_Bstr_pack<xstl::basic_bitstring_ref<_Block, _Alloc>>>;
+        using pointer         = xstl::iter_adapter::rand_iter<typename _Bstr_base::const_reference, xstl::_Bstr_pack<xstl::basic_bitstring_ref<_Block, _Alloc>>>;
         using element_type    = typename _Bstr_base::reference;
         using difference_type = typename _Bstr_base::difference_type;
 
-        [[nodiscard]] static constexpr pointer pointer_to(element_type& value) noexcept { return pointer(value); }
+        XSTL_NODISCARD static constexpr pointer pointer_to(element_type& value) noexcept { return pointer(value); }
     };
 
     template <unsigned_integral _Block, class _Alloc>
-    struct pointer_traits<xstl::xstl_iterator::rand_citer<typename xstl::bitstring_base<_Block, _Alloc, xstl::basic_bitstring_ref<_Block, _Alloc>>::reference,
+    struct pointer_traits<xstl::iter_adapter::rand_citer<typename xstl::bitstring_base<_Block, _Alloc, xstl::basic_bitstring_ref<_Block, _Alloc>>::reference,
                                                           xstl::_Bstr_pack<xstl::basic_bitstring_ref<_Block, _Alloc>>>> {
         using _Bstr_base      = xstl::bitstring_base<_Block, _Alloc, xstl::basic_bitstring_ref<_Block, _Alloc>>;
-        using pointer         = xstl::xstl_iterator::rand_citer<typename _Bstr_base::const_reference, xstl::_Bstr_pack<xstl::basic_bitstring_ref<_Block, _Alloc>>>;
+        using pointer         = xstl::iter_adapter::rand_citer<typename _Bstr_base::const_reference, xstl::_Bstr_pack<xstl::basic_bitstring_ref<_Block, _Alloc>>>;
         using element_type    = typename _Bstr_base::const_reference;
         using difference_type = typename _Bstr_base::difference_type;
 
-        [[nodiscard]] static constexpr pointer pointer_to(element_type& value) noexcept { return pointer(value); }
+        XSTL_NODISCARD static constexpr pointer pointer_to(element_type& value) noexcept { return pointer(value); }
     };
 
     template <unsigned_integral _Block, class _Alloc, class _Derived>
