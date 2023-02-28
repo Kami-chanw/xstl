@@ -2,7 +2,7 @@
 #define _HUFFMAN_HPP_
 #include "bitstream.hpp"
 #include "compressed_tuple.hpp"
-#include "config.hpp"
+#include "utility.hpp"
 #include <list>
 #include <map>
 #include <string>
@@ -61,12 +61,13 @@ namespace xstl {
         template <class _Alnode>
         inline _Huff_node* _Create_node(_Alnode& alloc, uint8_t value, int weight, _Huff_node* left = nullptr, _Huff_node* right = nullptr) {
             _Huff_node*     _node = alloc.allocate(1);
-            pointer_guard _guard(_node, [](_Huff_node* node) { destroy_node(node); });
+            scoped_guard _guard([&] { destroy_node(alloc, _node); });
             std::allocator_traits<_Alnode>::construct(alloc, std::addressof(_node->_value), value);
             _node->_left   = left;
             _node->_right  = right;
             _node->_weight = weight;
-            return _guard.release();
+            _guard.dismiss();
+            return _node;
         }
 
     }  // namespace
@@ -75,7 +76,7 @@ namespace xstl {
      *	@class huff_encoder
      *  @brief compress data by Huffman code
      */
-    template <class _Alloc = _DEFAULT_ALLOC(uint8_t)>
+    template <class _Alloc = DEFAULT_ALLOC(uint8_t)>
     class huff_encoder {
         using _Self      = huff_encoder<_Alloc>;
         using _PairAlloc = typename std::allocator_traits<_Alloc>::template rebind_alloc<std::pair<const uint8_t, std::string>>;

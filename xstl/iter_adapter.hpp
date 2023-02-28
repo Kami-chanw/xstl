@@ -152,7 +152,11 @@ namespace xstl {
             using _Nodeptr = typename _Scary_val::_Nodeptr;
             static_assert(std::is_default_constructible_v<_Nodeptr>, "node pointer should be default constructible");
 
-            constexpr iter_base() = default;
+            constexpr iter_base()                           = default;
+            constexpr iter_base(const unchecked_iter_base&) = default;
+            template <class _Other_val,
+                      std::enable_if_t<_Scary_val::template is_forced_castable<_Scary_val, _Other_val>::value, int> = 0>
+            constexpr iter_base(const iter_base<_Other_val>& right) : _node(right._node), _pcont(right._cont) {}
             constexpr iter_base(_Nodeptr node, const container_val_base* cont) noexcept : _node(node), _pcont(cont) {}
 
             XSTL_NODISCARD constexpr _Nodeptr                  base() const noexcept { return _node; }
@@ -168,7 +172,11 @@ namespace xstl {
             using _Nodeptr = typename _Scary_val::_Nodeptr;
             static_assert(std::is_default_constructible_v<_Nodeptr>, "node pointer should be default constructible");
 
-            constexpr unchecked_iter_base() = default;
+            constexpr unchecked_iter_base()                           = default;
+            constexpr unchecked_iter_base(const unchecked_iter_base&) = default;
+            template <class _Other_val,
+                      std::enable_if_t<_Scary_val::template is_forced_castable<_Scary_val, _Other_val>::value, int> = 0>
+            constexpr unchecked_iter_base(const unchecked_iter_base<_Other_val>& right) : _node(right._node) {}
             constexpr unchecked_iter_base(_Nodeptr node, const container_val_base*) : _node(node) {}
 
             XSTL_NODISCARD constexpr _Nodeptr                  base() const noexcept { return _node; }
@@ -178,7 +186,7 @@ namespace xstl {
             _Nodeptr _node{};
         };
 
-#if !defined(_NO_XSTL_SAFETY_VERIFT_) || !defined(_NO_XSTL_ITER_SAFETY_VERIFT_)
+#if !defined(NO_XSTL_SAFETY_VERIFY) || !defined(_NO_XSTL_ITER_SAFETY_VERIFT_)
         template <class _Scary_val>
         using default_iter_base = iter_base<_Scary_val>;
 #else
@@ -202,7 +210,7 @@ namespace xstl {
             using _ScaryVal = _Scary_val;
 
             // noexcept(++*this)
-            template <class _Cate, auto = combined_flag_v<std::is_convertible<_Cate, std::random_access_iterator_tag>,
+            template <class _Cate, auto = type_pred_mask_v<std::is_convertible<_Cate, std::random_access_iterator_tag>,
                                                           std::is_convertible<_Cate, std::forward_iterator_tag>>>
             struct is_nothrow_unchecked_pre_increasable : std::true_type {};
             template <class _Cate>
@@ -214,7 +222,7 @@ namespace xstl {
             static constexpr bool is_nothrow_unchecked_pre_increasable_v = is_nothrow_unchecked_pre_increasable<_Cat>::value;
 
             // noexcept(--*this)
-            template <class _Cate, auto = combined_flag_v<std::is_convertible<_Cate, std::random_access_iterator_tag>,
+            template <class _Cate, auto = type_pred_mask_v<std::is_convertible<_Cate, std::random_access_iterator_tag>,
                                                           std::is_convertible<_Cate, std::bidirectional_iterator_tag>>>
             struct is_nothrow_unchecked_pre_decreasable : std::true_type {};
             template <class _Cate>
@@ -237,7 +245,12 @@ namespace xstl {
             static constexpr bool is_nothrow_unchecked_dereferable_v = noexcept(_Scary_val::extract(_Nodeptr{}));
 
         public:
-            constexpr unchecked_const_iterator() = default;
+            constexpr unchecked_const_iterator()             = default;
+            constexpr unchecked_const_iterator(const _Self&) = default;
+            template <class _Other_val,
+                      std::enable_if_t<_Scary_val::template is_forced_castable<_Scary_val, _Other_val>::value, int> = 0>
+            constexpr unchecked_const_iterator(const unchecked_const_iterator<_Other_val, _Cat, _Base>& right) : _Base(right) {}
+
             constexpr unchecked_const_iterator(_Nodeptr node, const container_val_base* cont) noexcept(
                 std::is_nothrow_copy_constructible_v<_Nodeptr>)
                 : _Base(node, cont) {}
@@ -378,7 +391,10 @@ namespace xstl {
             using difference_type   = get_difference_t<_Scary_val>;
             using iterator_category = typename _Base::iterator_category;
 
-            constexpr iterator_impl() = default;
+            constexpr iterator_impl()             = default;
+            constexpr iterator_impl(const _Self&) = default;
+            template <class _Other_base>
+            constexpr iterator_impl(const iterator_impl<_Other_base>& right) : _Base(right) {}
             constexpr iterator_impl(_Nodeptr                  node,
                                     const container_val_base* cont) noexcept(std::is_nothrow_copy_constructible_v<_Base>)
                 : _Base(node, cont) {}
@@ -452,7 +468,7 @@ namespace xstl {
             using difference_type   = get_difference_t<_Scary_val>;
             using iterator_category = _Cat;
 
-            // protected:
+        protected:
             using _ScaryVal = _Scary_val;
 
             // noexcept(range_verify)
@@ -465,7 +481,7 @@ namespace xstl {
             static constexpr bool is_nothrow_range_verify_v = is_nothrow_range_verify<_Cat>::value;
 
             // noexcept(++*this) && noexcept(range_verify OR incresable)
-            template <class _Cate, auto = combined_flag_v<std::is_convertible<_Cate, std::random_access_iterator_tag>,
+            template <class _Cate, auto = type_pred_mask_v<std::is_convertible<_Cate, std::random_access_iterator_tag>,
                                                           std::is_convertible<_Cate, std::forward_iterator_tag>>>
             struct is_nothrow_pre_increasable : std::true_type {};
             template <class _Cate>
@@ -479,7 +495,7 @@ namespace xstl {
             static constexpr bool is_nothrow_pre_increasable_v = is_nothrow_pre_increasable<_Cat>::value;
 
             // noexcept(--*this) && noexcept(range_verify OR decresable)
-            template <class _Cate, auto = combined_flag_v<std::is_convertible<_Cate, std::random_access_iterator_tag>,
+            template <class _Cate, auto = type_pred_mask_v<std::is_convertible<_Cate, std::random_access_iterator_tag>,
                                                           std::is_convertible<_Cate, std::bidirectional_iterator_tag>>>
             struct is_nothrow_pre_decreasable : std::true_type {};
             template <class _Cate>
@@ -504,7 +520,11 @@ namespace xstl {
                 _Base::is_nothrow_unchecked_dereferable_v&& noexcept(_Scary_val::dereferable(CAST2SCARY(nullptr), _Nodeptr{}));
 
         public:
-            constexpr xstl_const_iterator() = default;
+            constexpr xstl_const_iterator()             = default;
+            constexpr xstl_const_iterator(const _Self&) = default;
+            template <class _Other_val,
+                      std::enable_if_t<_Scary_val::template is_forced_castable<_Scary_val, _Other_val>::value, int> = 0>
+            constexpr xstl_const_iterator(const xstl_const_iterator<_Other_val, _Cat>& right) : _Base(right) {}
             constexpr xstl_const_iterator(_Nodeptr                  node,
                                           const container_val_base* cont) noexcept(std::is_nothrow_copy_constructible_v<_Nodeptr>)
                 : _Base(node, cont) {}

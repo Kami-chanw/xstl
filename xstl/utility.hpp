@@ -9,84 +9,24 @@
 #ifndef _UTILITY_HPP_
 #define _UTILITY_HPP_
 
+#include "xstl_core.hpp"
 #include <cassert>
 #include <cstdio>  // for stderr
 #include <type_traits>
-
-#if __has_cpp_attribute(nodiscard)
-#define XSTL_NODISCARD [[nodiscard]]
-#else
-#define XSTL_NODISCARD
-#endif
-
-#ifdef __cpp_lib_unreachable
-#define UNREACHABLE() ::std::unreachable()
-#elif defined __GNUC__  // GCC, Clang, ICC
-#define UNREACHABLE() __builtin_unreachable()
-#elif defined _MSC_VER  // MSVC
-#define UNREACHABLE() __assume(false)
-#endif
 
 #ifdef __cpp_lib_three_way_comparison
 #include <compare>
 #endif
 #define CAST2SCARY(CONT) static_cast<const _Scary_val*>(CONT)
 
-#define XSTL_ASSUME(MSG, EXPR) static_cast<void>((EXPR) ? void(0) : UNREACHABLE())
-#define XSTL_ASSERT(MSG, ...) \
-    static_cast<void>(        \
-        (__VA_ARGS__) ? void(0) : xstl::assert_failure(static_cast<const char*>(__FILE__), __LINE__, "assertion failed: " #MSG))
-
-#ifdef _NO_XSTL_SAFETY_VERIFT_
-#define XSTL_EXPECT(EXPR, MSG) XSTL_ASSUME(MSG, EXPR)
-#else
-#define XSTL_EXPECT(EXPR, MSG) XSTL_ASSERT(MSG, EXPR)
-#endif
-
-#define XSTL_CONCEPT_CAT_(X, Y) X##Y
-#define XSTL_CONCEPT_CAT(X, Y) XSTL_CONCEPT_CAT_(X, Y)
-
-/// Requires-clause emulation with SFINAE (for templates)
-#define XSTL_REQUIRES_(...)                  \
-    int XSTL_CONCEPT_CAT(_concept_requires_, \
-                         __LINE__) = 42,     \
-                         ::std::enable_if_t < (XSTL_CONCEPT_CAT(_concept_requires_, __LINE__) == 43) || (__VA_ARGS__), int > = 0
-
-/// Requires-clause emulation with SFINAE (for "non-templates")
-#define XSTL_REQUIRES(...)                                                                                           \
-    template <int XSTL_CONCEPT_CAT(_concept_requires_, __LINE__)                                               = 42, \
-              ::std::enable_if_t<(XSTL_CONCEPT_CAT(_concept_requires_, __LINE__) == 43) || (__VA_ARGS__), int> = 0>
-
-#define MISMATCH_ALLOCATOR_MESSAGE(CONTAINER, VALUE_TYPE)               \
-    CONTAINER " requires that Allocator's value_type match " VALUE_TYPE \
-              " (See N4659 26.2.1 [container.requirements.general]/16 allocator_type)"
 namespace xstl {
-    void assert_failure(char const* file, int line, char const* msg) {
-        fprintf(stderr, "%s(%d): %s\n", file, line, msg);
-        abort();
-    }
-
-    template <class _Node, class _Rlsr>
-    struct pointer_guard {
-        pointer_guard(_Node* ptr, _Rlsr releaser) : _node(ptr), _releaser(releaser) {}
-        _Node* release() noexcept {
-            _Node* _tmp = _node;
-            _node       = nullptr;
-            return _tmp;
-        }
-        ~pointer_guard() {
-            if (_node)
-                _releaser(_node);
-        }
-
-    private:
-        _Node* _node;
-        _Rlsr  _releaser;
-    };
 
     template <class _Rlsr>
     struct scoped_guard {
         scoped_guard(_Rlsr releaser) : _releaser(releaser) {}
+
+        scoped_guard(const scoped_guard&)            = delete;
+        scoped_guard& operator=(const scoped_guard&) = delete;
 
         void dismiss() noexcept { _ok = true; }
 
@@ -100,8 +40,6 @@ namespace xstl {
         _Rlsr _releaser;
     };
 
-    template <class _Node, class _Rlsr>
-    pointer_guard(_Node*, _Rlsr) -> pointer_guard<_Node, _Rlsr>;
     template <class _Rlsr>
     scoped_guard(_Rlsr) -> scoped_guard<_Rlsr>;
 
@@ -112,7 +50,8 @@ namespace xstl {
     template <class _Tp, class... _Types>
     inline constexpr bool is_any_of_v = std::disjunction_v<std::is_same<_Tp, _Types>...>;
     template <class _Tp>
-    inline constexpr bool is_character_v = is_any_of_v<_Tp, char, signed char, unsigned char, wchar_t, char8_t, char16_t, char32_t>;
+    inline constexpr bool is_character_v =
+        is_any_of_v<_Tp, char, signed char, unsigned char, wchar_t, char8_t, char16_t, char32_t>;
 
     template <class _Tp, bool = std::is_enum_v<_Tp>>
     struct unwrap_enum {
@@ -121,7 +60,8 @@ namespace xstl {
 
     template <class _Tp>
     struct unwrap_enum<_Tp, false> {
-    using type = _Tp;};
+        using type = _Tp;
+    };
 
     template <class _Tp>
     using unwrap_enum_t = typename unwrap_enum<_Tp>::type;
@@ -129,23 +69,27 @@ namespace xstl {
     template <class>
     inline constexpr bool always_false = false;  // for static_assert
 
+    /**
+     *  Composite multiple type predicates in a mask.
+     *  e.g. type_pred_mask_v<true_type, true_type, false_type, false_type> // 0b1101
+     */
     template <class... _Args>
-    struct combined_flag {
-        static_assert(sizeof...(_Args) <= 512, "incompatible amount of arguments and flag type");
-        static constexpr std::uint64_t value = combined_flag<_Args...>::value;
+    struct type_pred_mask {
+        static_assert(sizeof...(_Args) <= 512, "incompatible amount of arguments and mask type");
+        static constexpr std::uint64_t value = type_pred_mask<_Args...>::value;
     };
     template <class _Tp, class... _Args>
-    struct combined_flag<_Tp, _Args...> {
+    struct type_pred_mask<_Tp, _Args...> {
         static constexpr std::uint64_t value =
-            (std::uint64_t{ _Tp::value * 1 } << sizeof...(_Args)) | combined_flag<_Args...>::value;
+            (std::uint64_t{ _Tp::value * 1 } << sizeof...(_Args)) | type_pred_mask<_Args...>::value;
     };
     template <class _Tp>
-    struct combined_flag<_Tp> {
+    struct type_pred_mask<_Tp> {
         static constexpr std::uint64_t value = _Tp::value;
     };
 
     template <class... _Args>
-    inline constexpr std::uint64_t combined_flag_v = combined_flag<_Args...>::value;
+    inline constexpr std::uint64_t type_pred_mask_v = type_pred_mask<_Args...>::value;
 
     /*
      * select type conditionally from type predicates (which has static data member 'value' and type alias 'type') whose value ==
@@ -210,18 +154,18 @@ namespace xstl {
     using select_type_t = typename select_type<_Args...>::type;
 
 #ifdef __cpp_lib_concepts
-    //clang-format off
+    // clang-format off
     template <class _Ty>
-    concept boolean_testable = 
-        std::is_convertible_v<_Ty, bool> && requires(_Ty&& b) {
+    concept boolean_testable = std::is_convertible_v<_Ty, bool> && 
+        requires(_Ty&& b) {
             { !std::forward<_Ty>(b) } -> std::convertible_to<bool>;
         };
-    // clang-format on 
+    // clang-format on
     class synth_three_way {
     public:
         template <class _Ty1, class _Ty2>
         XSTL_NODISCARD constexpr auto operator()(const _Ty1& lhs, const _Ty2& rhs) const
-        // clang-format off
+            // clang-format off
         requires requires {
             { lhs < rhs } -> boolean_testable;
             { rhs < lhs } -> boolean_testable;
@@ -241,5 +185,30 @@ namespace xstl {
     using synth_three_way_result = decltype(synth_three_way{}(std::declval<_Ty1&>(), std::declval<_Ty2&>()));
 #endif
 
+    struct move_op_tag {  // tag to request move operation
+        explicit move_op_tag() = default;
+    };
+    struct copy_op_tag {  // tag to request copy operation
+        explicit copy_op_tag() = default;
+    };
+
+    template <size_t _Idx, class... _Args>
+    struct args_element;
+
+    template <size_t _Idx>
+    struct args_element<_Idx> {
+        static_assert(always_false<decltype(_Idx)>, "out of bound");
+    };
+
+    template <class _Tp, class... _Rest>
+    struct args_element<0, _Tp, _Rest...> {
+        using type = _Tp;
+    };
+
+    template <size_t _Idx, class _Tp, class... _Rest>
+    struct args_element<_Idx, _Tp, _Rest...> : args_element<_Idx - 1, _Rest...> {};
+
+    template <size_t _Idx, class... _Args>
+    using args_element_t = args_element<_Idx, _Args...>::type;
 }  // namespace xstl
 #endif

@@ -430,9 +430,9 @@ namespace xstl {
 
         _Bs_tree(const _Bs_tree& other, const allocator_type& alloc) : _tpl(other.key_comp(), alloc, std::ignore) {
             _Init();
-            pointer_guard guard(_Get_root(), [&](_Nodeptr ptr) { _Node::destroy_node(_Getal(), ptr); });
-            _Copy<true>(other);
-            guard.release();
+            scoped_guard _guard([&] { _Node::destroy_node(_Getal(), _Get_root()); });
+            _Copy<copy_op_tag>(other);
+            _guard.dismiss();
         }
 
         _Bs_tree(_Bs_tree&& other) : _tpl(other.key_cmpr(), other._Getal(), std::ignore) {
@@ -444,9 +444,9 @@ namespace xstl {
             _Init();
             if constexpr (!_Alnode_traits::is_always_equal::value) {
                 if (_Getal() != other._Getal()) {
-                    pointer_guard guard(_Get_root(), [&](_Nodeptr ptr) { _Node::destroy_node(ptr); });
-                    _Copy<false>(other);
-                    guard.release();
+                    scoped_guard _guard([&] { _Node::destroy_node(_Getal(), _Get_root()); });
+                    _Copy<move_op_tag>(other);
+                    _guard.dismiss();
                     return;
                 }
             }
@@ -898,9 +898,9 @@ namespace xstl {
         _Find_hint_result _Find_hint(const _Nodeptr, const _Key&);
         template <class... _Args>
         iterator _Emplace_hint(_Nodeptr, _Args&&...);
-        template <bool _IsCopy>  // true --> copy value | false --> move value
+        template <class _Tag>
         void _Copy(const _Self&);
-        template <bool _IsCopy>  // true --> copy value | false --> move value
+        template <class _Tag>
         _Nodeptr    _Copy_nodes(_Nodeptr, _Nodeptr);
         _Nodeptr    _Erase(_Nodeptr);
         inline void _Check_max_size(const char* msg = "map/set too long") const {
@@ -936,10 +936,10 @@ namespace xstl {
     };
 
     template <class _Traits, template <class, class> class... _MixIn>
-    template <bool _IsCopy>
+    template <class _Tag>
     void _Bs_tree<_Traits, _MixIn...>::_Copy(const _Self& other) {
         _Nodeptr _root = _Get_root();
-        _root->_parent = _Copy_nodes<_IsCopy>(other._Get_root()->_parent, _root);
+        _root->_parent = _Copy_nodes<_Tag>(other._Get_root()->_parent, _root);
         _size          = other._size;
         if (!_root->_parent->_is_nil) {  // nonempty tree, look for new smallest and largest
             _root->_left  = _Node::leftmost(_root->_parent);
@@ -952,12 +952,12 @@ namespace xstl {
     }
 
     template <class _Traits, template <class, class> class... _MixIn>
-    template <bool _IsCopy>
+    template <class _Tag>
     typename _Bs_tree<_Traits, _MixIn...>::_Nodeptr _Bs_tree<_Traits, _MixIn...>::_Copy_nodes(_Nodeptr src, _Nodeptr dst) {
         _Nodeptr _subroot = _Get_root();
         if (!src->_is_nil) {
             _Nodeptr _node;
-            if constexpr (_IsCopy)
+            if constexpr (std::is_same_v<_Tag, copy_op_tag>)
                 _node = _Node::create_node(_Getal(), _subroot, src->_value);
             else {
                 if constexpr (std::is_same_v<key_type, value_type>)  // is set
@@ -970,8 +970,8 @@ namespace xstl {
             if (_subroot->_is_nil)
                 _subroot = _node;
             try {
-                _node->_left  = _Copy_nodes<_IsCopy>(src->_left, _node);
-                _node->_right = _Copy_nodes<_IsCopy>(src->_right, _node);
+                _node->_left  = _Copy_nodes<_Tag>(src->_left, _node);
+                _node->_right = _Copy_nodes<_Tag>(src->_right, _node);
             } catch (...) {
                 _Destroy(_node);
                 throw;
@@ -1381,7 +1381,7 @@ namespace xstl {
                       "merge() requires an argument with the same allocator type.");
 
         if constexpr (std::is_same_v<_Bs_tree, _Bs_tree<_Other_traits, _MixIn...>>)
-            if (this == std::addressof(x))
+            if XSTL_UNLIKELY (this == std::addressof(x))
                 return;
         if constexpr (!_Alnode_traits::is_always_equal::value)
             XSTL_EXPECT(_Getal() != x._Getal(), "tree allocators incompatible for merge");
@@ -1529,7 +1529,7 @@ namespace xstl {
 
     template <class _Traits, template <class, class> class... _MixIn>
     void _Bs_tree<_Traits, _MixIn...>::swap(_Bs_tree& x) noexcept(std::is_nothrow_swappable_v<key_compare>) {
-        if (this != std::addressof(x)) {
+        if XSTL_LIKELY (this != std::addressof(x)) {
             using std::swap;
             swap(_Get_cmpr(), x._Get_cmpr());
             _Swap_excluding_cmpr(x);
@@ -1551,7 +1551,7 @@ namespace xstl {
 
     template <class _Traits, template <class, class> class... _MixIn>
     _Bs_tree<_Traits, _MixIn...>& _Bs_tree<_Traits, _MixIn...>::operator=(const _Bs_tree& rhs) {
-        if (this == std::addressof(rhs))
+        if XSTL_UNLIKELY (this == std::addressof(rhs))
             return *this;
 
         auto& _al       = _Getal();
@@ -1567,7 +1567,7 @@ namespace xstl {
         }
 
         alloc_pocca(_al, _other_al);
-        _Copy<true>(rhs);
+        _Copy<copy_op_tag>(rhs);
 
         return *this;
     }
@@ -1575,7 +1575,7 @@ namespace xstl {
     template <class _Traits, template <class, class> class... _MixIn>
     _Bs_tree<_Traits, _MixIn...>& _Bs_tree<_Traits, _MixIn...>::operator=(_Bs_tree&& rhs) noexcept(
         _Alnode_traits::is_always_equal::value&& std::is_nothrow_move_assignable_v<key_compare>) {
-        if (this == std::addressof(rhs))
+        if XSTL_UNLIKELY (this == std::addressof(rhs))
             return *this;
 
         auto& _al       = _Getal();
@@ -1596,7 +1596,7 @@ namespace xstl {
         }
         else if constexpr (_pocma_val == pocma_values::NoPropagate) {
             if (_al != _other_al) {
-                _Copy<false>(rhs);
+                _Copy<move_op_tag>(rhs);
                 return *this;
             }
         }

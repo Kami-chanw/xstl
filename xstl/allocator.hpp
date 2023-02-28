@@ -12,6 +12,7 @@
 #ifndef _ALLOCATORS_HPP_
 #define _ALLOCATORS_HPP_
 
+#include "xstl_core.hpp"
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
@@ -467,7 +468,7 @@ namespace xstl {
         if constexpr (std::allocator_traits<_Alloc>::propagate_on_container_swap::value)
             swap(left, right);
         else
-            assert(("containers incompatible for swap", left != right));
+            XSTL_EXPECT(left != right, "containers incompatible for swap");
     }
 
     // propagate on container copy assignment
@@ -503,7 +504,7 @@ namespace xstl {
 
     template <class _Ty, class... _Args>
     constexpr void construct_in_place(_Ty& obj, _Args&&... args) noexcept(std::is_nothrow_constructible_v<_Ty, _Args...>) {
-#if __cplusplus >= 202002L
+#if XSTL_HAS_CXX20
         if (std::is_constant_evaluated())
             std::construct_at(std::addressof(obj), std::forward<_Args>(args)...);
         else
@@ -523,7 +524,7 @@ namespace xstl {
             obj.~_Ty();
     }
 
-#if __cplusplus >= 202207L
+#if XSTL_HAS_CXX20
     template <std::size_t _Len, std::size_t _Align>
     struct xstl_aligned_storage_t {
         alignas(_Align) unsigned char data[_Len];
@@ -542,12 +543,10 @@ namespace xstl {
     template <class _Void, class... _Types>
     struct has_no_allocator_construct : true_type {};
 
-    _STL_DISABLE_DEPRECATED_WARNING
     template <class _Alloc, class _Ptr, class... _Args>
     struct has_no_allocator_construct<
         std::void_t<decltype(std::declval<_Alloc&>().construct(std::declval<_Ptr>(), std::declval<_Args>()...))>, _Alloc, _Ptr,
         _Args...> : std::false_type {};
-    _STL_RESTORE_DEPRECATED_WARNING
 
     template <class _Alloc, class _Ptr, class... _Args>
     using uses_default_construct =
@@ -556,16 +555,55 @@ namespace xstl {
     template <class _Alloc, class _Ptr, class = void>
     struct has_no_allocator_destroy : true_type {};
 
-    _STL_DISABLE_DEPRECATED_WARNING
     template <class _Alloc, class _Ptr>
-    struct has_no_allocator_destroy<_Alloc, _Ptr, void_t<decltype(std::declval<_Alloc&>().destroy(std::declval<_Ptr>()))>>
+    struct has_no_allocator_destroy<_Alloc, _Ptr, std::void_t<decltype(std::declval<_Alloc&>().destroy(std::declval<_Ptr>()))>>
         : std::false_type {};
-    _STL_RESTORE_DEPRECATED_WARNING
 
     template <class _Alloc, class _Ptr>
     using uses_default_destroy = std::disjunction<is_default_allocator<_Alloc>, has_no_allocator_destroy<_Alloc, _Ptr>>;
 
     template <class _Alloc, class _Ptr>
     using uses_default_destroy_t = typename uses_default_destroy<_Alloc, _Ptr>::type;
+
+    template <class _Ty, class = void>
+    struct is_allocator : std::false_type {};
+
+    template <class _Ty>
+    struct is_allocator<_Ty, std::void_t<typename _Ty::value_type, decltype(std::declval<_Ty&>().deallocate(
+                                                                       std::declval<_Ty&>().allocate(size_t{ 1 }), size_t{ 1 }))>>
+        : std::true_type {
+        using type = _Ty;
+    };
+
+    template <class _Alloc>
+    class value_proxy {
+        using _Traits    = std::allocator_traits<_Alloc>;
+        using value_type = typename _Traits::value_type;
+        union {
+            value_type _value;
+        };
+
+    public:
+        XSTL_NODISCARD value_type& get_value() noexcept { return _value; }
+
+        XSTL_NODISCARD const value_type& get_value() const noexcept { return _value; }
+
+        // clang-format off
+        template <class... _Args>
+        explicit value_proxy(_Alloc& alloc, _Args&&... args) noexcept(
+            noexcept(_Traits::construct(alloc, std::addressof(get_value()), std::forward<_Args>(args)...)))
+            : _al(alloc) {
+            // clang-format on
+            _Traits::construct(_al, std::addressof(get_value()), std::forward<_Args>(args)...);
+        }
+
+        value_proxy(const value_proxy&)            = delete;
+        value_proxy& operator=(const value_proxy&) = delete;
+
+        ~value_proxy() { _Traits::destroy(_al, std::addressof(get_value())); }
+
+    private:
+        _Alloc& _al;
+    };
 }  // namespace xstl
 #endif
