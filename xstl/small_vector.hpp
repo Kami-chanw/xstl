@@ -256,21 +256,16 @@ namespace xstl {
             }
 
             template <class _Alloc, class _Iter, class... _Args>
-            static void construct_range(_Alloc& alloc, _Iter first, _Iter last, _Args&&... args) {
+            static void construct_range(_Alloc& alloc, _Iter first, const _Iter last, _Args&&... args) {
                 if (first == last)
                     return;
                 const pointer _old_first = first;
-                auto          _guard     = scoped_guard([&] {
-                    if (first != last)
-                        destroy(alloc, _old_first, first);
-                });
+                auto          _guard     = scoped_guard([&] { destroy(alloc, _old_first, first); });
                 if constexpr (sizeof...(args) == 0) {
                     // value construct [first, last)
                     if constexpr (std::conjunction_v<uses_default_construct<allocator_type, pointer>,
-                                                     std::is_nothrow_constructible<value_type>>) {
+                                                     std::is_nothrow_constructible<value_type>>)
                         std::uninitialized_value_construct(first, last);
-                        first = last;
-                    }
                     else {
                         do {
                             construct(alloc, first);
@@ -282,7 +277,7 @@ namespace xstl {
                     static_assert(std::is_same_v<_Args..., const_reference>);
                     if constexpr (std::conjunction_v<uses_default_construct<allocator_type, pointer, _Args...>,
                                                      std::is_nothrow_constructible<value_type, _Args...>>)
-                        first = std::uninitialized_fill(first, last, args...);
+                        std::uninitialized_fill(first, last, args...);
                     else {
                         static_assert(std::is_same_v<_Args..., const_reference>,
                                       "This is only allowed if _Args is the same as const_reference");
@@ -307,10 +302,12 @@ namespace xstl {
                         if constexpr (std::is_nothrow_move_constructible_v<value_type>
                                       || !std::is_copy_constructible_v<value_type>) {
                             if constexpr (uses_default_construct<allocator_type, pointer, value_type&&>::value)
-                                first = std::uninitialized_move(_first, _last, first);
+                                std::uninitialized_move(_first, _last, first);
                             else {  // still might throw
-                                for (; _first != _last; ++first, ++_first)
+                                do {
                                     construct(alloc, first, std::move(*_first));
+                                    ++first;
+                                } while (++_first != _last);
                             }
                             _guard.dismiss();
                             return;
@@ -318,10 +315,82 @@ namespace xstl {
                     }
                     if constexpr (std::conjunction_v<uses_default_construct<allocator_type, pointer, _Iter_val_t>,
                                                      std::is_nothrow_constructible<value_type, _Iter_val_t>>)
-                        first = std::uninitialized_copy(_first, _last, first);
+                        std::uninitialized_copy(_first, _last, first);
                     else {
-                        for (; _first != _last; ++first, ++_first)
+                        do {
                             construct(alloc, first, *_first);
+                            ++first;
+                        } while (++_first != _last);
+                    }
+                }
+                else {
+                    static_assert(always_false<_Args...>, "Should be unreachable");
+                }
+                _guard.dismiss();
+            }
+
+            template <class _Alloc, class _Iter, class... _Args>
+            static void construct_range_n(_Alloc& alloc, _Iter first, size_type n, _Args&&... args) {
+                if (n == 0)
+                    return;
+                const pointer _old_first = first;
+                auto          _guard     = scoped_guard([&] { destroy(alloc, _old_first, first); });
+                if constexpr (sizeof...(args) == 0) {
+                    // value construct [first, first + n)
+                    if constexpr (std::conjunction_v<uses_default_construct<allocator_type, pointer>,
+                                                     std::is_nothrow_constructible<value_type>>)
+                        std::uninitialized_value_construct_n(first, n);
+                    else {
+                        do {
+                            construct(alloc, first);
+                        } while (--n > 0);
+                    }
+                }
+                else if constexpr (sizeof...(args) == 1) {
+                    // fill [first, first + n) by a lref
+                    static_assert(std::is_same_v<_Args..., const_reference>);
+                    if constexpr (std::conjunction_v<uses_default_construct<allocator_type, pointer, _Args...>,
+                                                     std::is_nothrow_constructible<value_type, _Args...>>)
+                        std::uninitialized_fill_n(first, n, args...);
+                    else {
+                        static_assert(std::is_same_v<_Args..., const_reference>,
+                                      "This is only allowed if _Args is the same as const_reference");
+                        do {
+                            construct(alloc, first, std::forward<_Args>(args)...);
+                        } while (--n > 0);
+                    }
+                }
+                else if constexpr (sizeof...(args) == 2) {
+                    // construct [first, first + n) from [src, ...)
+                    // e.g. construct_range(al, first, n, copy_op_tag, src)
+                    auto _src = std::make_pair(std::forward<_Args>(args)...).second;
+
+                    using _Strategy   = args_element_t<0, _Args...>;
+                    using _Iter_val_t = typename std::iterator_traits<args_element_t<1, _Args...>>::value_type;
+                    static_assert(is_any_of_v<_Strategy, copy_op_tag, move_op_tag>, "tag should be copy_op_tag or move_op_tag");
+                    if constexpr (std::is_same_v<_Strategy, move_op_tag>) {
+                        if constexpr (std::is_nothrow_move_constructible_v<value_type>
+                                      || !std::is_copy_constructible_v<value_type>) {
+                            if constexpr (uses_default_construct<allocator_type, pointer, value_type&&>::value)
+                                std::uninitialized_move_n(_src, n, first);
+                            else {  // still might throw
+                                do {
+                                    construct(alloc, first, std::move(*_src));
+                                    ++_src, ++first;
+                                } while (--n > 0);
+                            }
+                            _guard.dismiss();
+                            return;
+                        }
+                    }
+                    if constexpr (std::conjunction_v<uses_default_construct<allocator_type, pointer, _Iter_val_t>,
+                                                     std::is_nothrow_constructible<value_type, _Iter_val_t>>)
+                        std::uninitialized_copy_n(_src, n, first);
+                    else {
+                        do {
+                            construct(alloc, first, *_src);
+                            ++_src, ++first;
+                        } while (--n > 0);
                     }
                 }
                 else {
@@ -778,8 +847,7 @@ namespace xstl {
             if (_val.is_data_inline())
                 return;
             if (_sz < _Base::max_inline) {
-                _Scary_val::construct_range(_al, _vec.buffer(), _vec.buffer() + _sz, move_op_tag{}, _vec.heap(),
-                                            _vec.heap() + _sz);
+                _Scary_val::construct_range_n(_al, _vec.buffer(), _sz, move_op_tag{}, _vec.heap());
                 _val.free_all(_al);
                 _val.set_data_inline(true);
             }
@@ -1020,8 +1088,8 @@ namespace xstl {
             return { _ptr, _Shift_pointer(_ptr, _Scary_val::heapify_capacity_size) };
         }
 
-        template <class... _Args>
-        void _Insert_n(const_iterator pos, const size_type n, _Args&&... args) {  // pos shouldn't be end, checking forwardly
+        template <class _Ty>
+        void _Insert_n(const_iterator pos, const size_type n, _Ty&& val) {  // pos shouldn't be end, checking forwardly
             const size_type       _sz = size(), _old_newsz = n + _sz;
             _Scary_val&           _val  = _Get_val();
             const difference_type _off  = pos - begin();
@@ -1033,20 +1101,13 @@ namespace xstl {
                 const pointer _newpos = _pnew + _off;
                 auto          _guard  = [&] { _Alloc_traits::deallocate(_al, _ptr, _newsz); };
                 // construct new values
-                if constexpr (sizeof...(args) == 1) {
-                    if constexpr (std::is_same_v<const_reference, _Args...>)
-                        _Scary_val::construct_range(_al, _newpos, _newpos + n, std::forward<_Args>(args)...);
-                    else
-                        _Scary_val::construct(_al, _newpos, std::forward<_Args>(args)...);
-                }
-                else if constexpr (sizeof...(args) == 2) {
-                    static_assert(is_input_iterator_v<args_element_t<0, _Args...>>,
-                                  "should be iteraor when sizeof...(args) == 2");
-                    _Scary_val::construct_range(_al, _newpos, _newpos + n, copy_op_tag{}, std::forward<_Args>(args)...);
-                }
-                else {
-                    static_assert(always_false<_Args...>, "should be unreachable");
-                }
+                if constexpr (is_input_iterator_v<_Ty>)
+                    _Scary_val::construct_range_n(_al, _newpos, n, copy_op_tag{}, val);
+                else if constexpr (std::is_same_v<const_reference, _Ty>)
+                    _Scary_val::construct_range_n(_al, _newpos, n, val);
+                else
+                    _Scary_val::construct(_al, _newpos, std::move(val));
+
                 // move old data
                 _Scary_val::construct_range(_al, _pnew, _newpos, move_op_tag{}, _pold, _oldpos);
                 _Scary_val::construct_range(_al, _newpos + n, _pnew + _old_newsz, move_op_tag{}, _oldpos, _old_last);
@@ -1058,33 +1119,7 @@ namespace xstl {
                 _val.set_data_inline(false);
             }
             else {
-                if constexpr (sizeof...(args) == 1) {
-                    if constexpr (std::is_same_v<const_reference, _Args...>) {
-                        const value_proxy<allocator_type> _tmp_storage(
-                            _al, std::forward<_Args>(args)...);  // handle aliasing. It handles the case where const _Ty& _Val
-                                                                 // refers to
-                        // an element within the vector itself
-                        const_reference _tmp           = _tmp_storage.get_value();
-                        const size_type _rest_elements = end() - pos;
-                        if (n > _rest_elements) {  // new stuff spills off end
-                            _Scary_val::construct_range(_al, _old_last, _old_last + n - _rest_elements, _tmp);
-                            _Scary_val::construct_range(_al, _old_last + n - _rest_elements, _pold + _old_newsz, move_op_tag{},
-                                                        _oldpos, _old_last);
-                            std::fill(_oldpos, _old_last, _tmp);
-                        }
-                        else {  // new stuff can all be assigned
-                            _Scary_val::construct_range(_al, _old_last, _old_last + n, move_op_tag{}, _old_last - n, _old_last);
-                            std::move_backward(_oldpos, _old_last - n, _old_last);
-                            std::fill(_oldpos, _oldpos + n, _tmp);
-                        }
-                    }
-                    else {
-                        _Scary_val::construct(_al, _old_last, std::move(*(_old_last - 1)));
-                        std::move_backward(_oldpos, _old_last - 1, _old_last);
-                        *_oldpos = std::forward<_Args>(args)...;
-                    }
-                }
-                else if constexpr (sizeof...(args) == 2) {
+                if constexpr (is_input_iterator_v<_Ty>) {
                     auto [_first, _last]           = std::forward_as_tuple(std::forward<_Args>(args)...);
                     const size_type _rest_elements = end() - pos;
                     if (n > _rest_elements) {  // new stuff spills off end
@@ -1098,6 +1133,29 @@ namespace xstl {
                         std::move_backward(_oldpos, _old_last - n, _old_last);
                         std::fill(_oldpos, _oldpos + n, _tmp);
                     }
+                }
+                else if constexpr (std::is_same_v<const_reference, _Ty>) {
+                    const value_proxy<allocator_type> _tmp_storage(_al, val);  // handle aliasing. It handles the case where const
+                                                                               // _Ty& _Val refers to
+                    // an element within the vector itself
+                    const_reference _tmp           = _tmp_storage.get_value();
+                    const size_type _rest_elements = end() - pos;
+                    if (n > _rest_elements) {  // new stuff spills off end
+                        _Scary_val::construct_range_n(_al, _old_last, n - _rest_elements, _tmp);
+                        _Scary_val::construct_range(_al, _old_last + n - _rest_elements, _pold + _old_newsz, move_op_tag{},
+                                                    _oldpos, _old_last);
+                        std::fill(_oldpos, _old_last, _tmp);
+                    }
+                    else {  // new stuff can all be assigned
+                        _Scary_val::construct_range_n(_al, _old_last, n, move_op_tag{}, _old_last - n);
+                        std::move_backward(_oldpos, _old_last - n, _old_last);
+                        std::fill(_oldpos, _oldpos + n, _tmp);
+                    }
+                }
+                else {
+                    _Scary_val::construct(_al, _old_last, std::move(*(_old_last - 1)));
+                    std::move_backward(_oldpos, _old_last - 1, _old_last);
+                    *_oldpos = std::forward<_Args>(args)...;
                 }
             }
             _val.set_size(_old_newsz);
@@ -1113,11 +1171,11 @@ namespace xstl {
             auto          _guard = [&] { _Alloc_traits::deallocate(_al, _ptr, newsz); };
             // construct new values (if need)
             if constexpr (_Strat == _Allocate_strategy::Construct)
-                _Scary_val::construct_range(_al, _pnew + _sz, _pnew + _old_newsz, std::forward<_Args>(args)...);
+                _Scary_val::construct_range_n(_al, _pnew + _sz, _old_newsz, std::forward<_Args>(args)...);
             else if constexpr (_Strat == _Allocate_strategy::EmplaceAtBack)
                 _Scary_val::construct(_al, _pnew + _sz, std::forward<_Args>(args)...);
             // move old data
-            _Scary_val::construct_range(_al, _pnew, _pnew + _sz, move_op_tag{}, _pold, _pold + _sz);
+            _Scary_val::construct_range_n(_al, _pnew, _sz, move_op_tag{}, _pold);
             _guard.dismiss();
             _Scary_val::destroy(_al, _pold, _pold + _sz);
             _val.free_all(_al);
@@ -1135,7 +1193,7 @@ namespace xstl {
             _Expand_to<_Allocate_strategy::NoConstruct>(n);
             pointer _first = data();
             if constexpr (sizeof...(args) <= 1)
-                _Scary_val::construct_range(_al, _first, _first + n, std::forward<_Args>(args)...);
+                _Scary_val::construct_range_n(_al, _first, n, std::forward<_Args>(args)...);
             else if constexpr (sizeof...(args) == 2)
                 _Scary_val::construct_range(_al, _first, _first + n, copy_op_tag{}, std::forward<_Args>(args)...);
             else {

@@ -192,6 +192,8 @@ namespace xstl {
         explicit copy_op_tag() = default;
     };
 
+    // get type of a parameter pack at _Idx
+    // It behaves equivalent to tuple_element_t<_Idx, tuple<_Args...>>
     template <size_t _Idx, class... _Args>
     struct args_element;
 
@@ -210,5 +212,12 @@ namespace xstl {
 
     template <size_t _Idx, class... _Args>
     using args_element_t = args_element<_Idx, _Args...>::type;
+
+    // get one argument from a parameter pack at _Idx
+    // It behaves equivalent to get<_Idx>(forward_as_tuple(forward<_Args>(args)...))
+    template <size_t _Idx, class... _Args>
+    decltype(auto) get_args(_Args&&... args) {
+        return std::get<_Idx>(std::forward_as_tuple(std::forward<_Args>(args)...));
+    }
 }  // namespace xstl
 #endif
